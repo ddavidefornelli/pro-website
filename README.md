@@ -29,8 +29,8 @@ npx playwright install chromium webkit
 npm test
 ```
 
-Checks the page in Chromium and WebKit, including full-viewport layouts in portrait and landscape, no scrolling, and the inactive install button.
+Checks the page in Chromium and WebKit, including full-viewport layouts in portrait and landscape, no scrolling, and the Mac installer download.
 
 ## Mac download
 
-The **Install for Mac** button in `src/App.tsx` is intentionally disabled, with no URL or click handler. When the DMG is ready, replace it with a download link to the real package and update the availability note and test.
+The **Install for Mac** link in `src/App.tsx` downloads `/prune.dmg`. The installer is stored in `public/prune.dmg` and included in `dist/` during builds. Replace that file to publish a new installer.

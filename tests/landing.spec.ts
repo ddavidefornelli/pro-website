@@ -27,15 +27,19 @@ test("immediately identifies the product and its benefits", async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
-test("keeps the Mac install button intentionally inactive", async ({ page }) => {
+test("downloads the Mac installer", async ({ page }) => {
   await page.goto("/");
 
-  const install = page.getByRole("button", { name: "Install for Mac" });
-  await expect(install).toBeDisabled();
-  await expect(install).toHaveAttribute("type", "button");
-  await expect(install).toHaveAccessibleDescription("Download coming soon.");
-  await expect(page.getByRole("button")).toHaveCount(1);
-  await expect(page.locator("a[download], a[href$='.dmg']")).toHaveCount(0);
+  const install = page.getByRole("link", { name: "Install for Mac" });
+  await expect(install).toHaveAttribute("href", "/prune.dmg");
+  await expect(install).toHaveAttribute("download", "prune.dmg");
+  await expect(install).toHaveAccessibleDescription("Download for macOS.");
+
+  const downloadPromise = page.waitForEvent("download");
+  await install.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("prune.dmg");
+  expect(await download.failure()).toBeNull();
 });
 
 test("stays vertical and fully visible without scrolling at every screen size", async ({ page }) => {

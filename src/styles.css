@@ -134,9 +134,9 @@ h1 {
   font-weight: 650;
 }
 
-.install-button:disabled {
-  opacity: 1;
-  cursor: not-allowed;
+.install-button:hover {
+  background: #006ee6;
+  border-color: #006ee6;
 }
 
 .install-button svg {
