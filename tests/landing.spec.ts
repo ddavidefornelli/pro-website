@@ -27,6 +27,16 @@ test("immediately identifies the product and its benefits", async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
+test("initializes Web Analytics in development mode", async ({ page }) => {
+  await page.route("https://va.vercel-scripts.com/**", (route) =>
+    route.fulfill({ contentType: "application/javascript", body: "" }),
+  );
+  await page.goto("/");
+
+  await expect(page.locator('script[src="https://va.vercel-scripts.com/v1/script.debug.js"]')).toHaveCount(1);
+  expect(await page.evaluate(() => window.vam)).toBe("development");
+});
+
 test("downloads the Mac installer", async ({ page }) => {
   await page.goto("/");
 
