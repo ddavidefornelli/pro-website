@@ -46,4 +46,4 @@ Checks the page in Chromium and WebKit, including full-viewport layouts in portr
 
 ## Mac download
 
-The **Install for Mac** link in `src/App.tsx` downloads `/prune.dmg`. The installer is stored in `public/prune.dmg` and included in `dist/` during builds. Replace that file to publish a new installer.
+The **Install for Mac** link in `src/App.tsx` opens `/download`. That page displays a centered thank-you message and automatically downloads `/prune.dmg`. `vercel.json` rewrites direct visits to `/download` to the app entry point. The installer is stored in `public/prune.dmg` and included in `dist/` during builds. Replace that file to publish a new installer.

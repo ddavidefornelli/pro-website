@@ -1,4 +1,9 @@
+import Download from "./Download";
+
 export default function App() {
+  const isDownload = /^\/download\/?$/.test(window.location.pathname);
+  if (isDownload) return <Download />;
+
   return (
     <>
       <header class="site-header">
@@ -26,8 +31,7 @@ export default function App() {
           <div class="install-area">
             <a
               class="install-button"
-              href="/prune.dmg"
-              download="prune.dmg"
+              href="/download"
               aria-describedby="release-note"
             >
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

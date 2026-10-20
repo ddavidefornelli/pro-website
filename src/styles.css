@@ -92,6 +92,10 @@ main {
   text-align: center;
 }
 
+.download-page {
+  padding: 24px;
+}
+
 .hero {
   width: 100%;
 }

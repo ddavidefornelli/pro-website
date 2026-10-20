@@ -41,8 +41,7 @@ test("downloads the Mac installer", async ({ page }) => {
   await page.goto("/");
 
   const install = page.getByRole("link", { name: "Install for Mac" });
-  await expect(install).toHaveAttribute("href", "/prune.dmg");
-  await expect(install).toHaveAttribute("download", "prune.dmg");
+  await expect(install).toHaveAttribute("href", "/download");
   await expect(install).toHaveAccessibleDescription("Download for macOS.");
 
   const downloadPromise = page.waitForEvent("download");
@@ -50,6 +49,23 @@ test("downloads the Mac installer", async ({ page }) => {
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("prune.dmg");
   expect(await download.failure()).toBeNull();
+  await expect(page).toHaveURL(/\/download$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("THANK YOU FOR INSTALLING");
+});
+
+test("direct download page starts the installer and only shows a centered thank you", async ({ page }) => {
+  const downloadPromise = page.waitForEvent("download");
+  await page.goto("/download");
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("prune.dmg");
+  expect(await download.failure()).toBeNull();
+  expect(await page.locator("body").innerText()).toBe("THANK YOU FOR INSTALLING");
+  await expect(page.getByRole("link")).toHaveCount(0);
+  await expect(page.locator("header")).toHaveCount(0);
+  const center = await page.locator("h1").boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(center!.x + center!.width / 2).toBeCloseTo(viewport.width / 2, 0);
+  expect(center!.y + center!.height / 2).toBeCloseTo(viewport.height / 2, 0);
 });
 
 test("stays vertical and fully visible without scrolling at every screen size", async ({ page }) => {
