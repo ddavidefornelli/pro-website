@@ -8,7 +8,7 @@ export default function App() {
     <>
       <header class="site-header">
         <a class="wordmark" href="/" aria-label="prune home">
-          prune
+          <img src="/prunelogo.png" alt="prune" width="40" height="40" style={{ display: "block" }} />
         </a>
         <a class="contact-link" href="mailto:fornelli.dv@gmail.com">
           Contact
