@@ -1,0 +1,40 @@
+import { test, expect, openPlanner, addTask, synced } from "./helpers/browser";
+
+test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+test("touch-first signup and policy remain usable on a phone", async ({ page }, info) => {
+  await page.goto("/");
+  await expect(page.getByRole("textbox", { name: "Email address" })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: `test-results/${info.project.name}-mobile-signup.png`, fullPage: true });
+  await page.getByRole("button", { name: "Privacy Policy", exact: true }).first().tap();
+  await expect(page.getByRole("dialog")).toBeInViewport({ ratio: 1 });
+  await page.getByRole("button", { name: "Close privacy policy" }).tap();
+  await page.getByRole("checkbox").check();
+  await page.getByRole("textbox", { name: "Email address" }).fill("user@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("correct-password");
+  await page.getByRole("button", { name: "Sign in" }).tap();
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test.describe("mobile planner", () => {
+  test.use({ signedIn: true });
+  test("task controls, timer and pause dialog work with touch", async ({ page }, info) => {
+    await openPlanner(page);
+    for (const title of ["Write the first draft", "Ship the small update", "Make time to read"]) { await addTask(page, title); await synced(page); }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: `test-results/${info.project.name}-mobile-today.png`, fullPage: true });
+    await page.locator(".task.is-priority").getByRole("button", { name: "Start focus", exact: true }).tap();
+    await expect(page.locator("#focus-timer")).toBeEnabled();
+    await page.waitForTimeout(400); // Settle the navigation indicator's 360ms transition.
+    await page.screenshot({ path: `test-results/${info.project.name}-mobile-focus.png`, fullPage: true });
+    await page.locator("#focus-timer").tap();
+    await expect(page.getByRole("dialog", { name: "Why are you stopping?" })).toBeInViewport({ ratio: 1 });
+    await page.getByRole("textbox", { name: "Why are you stopping?" }).fill("Stretch break");
+    await page.getByRole("button", { name: "Save reason", exact: true }).tap();
+    await expect(page.locator("#focus-timer")).toHaveClass(/is-paused/);
+    await page.getByRole("button", { name: "Profile", exact: true }).tap();
+    await expect(page.locator(".profile-page")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  });
+});
