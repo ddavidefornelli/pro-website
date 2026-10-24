@@ -158,8 +158,7 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
         if (sentTo && code.isConnected) code.focus();
       }
     });
-    const aiNotice = element("p", "Free to use. Automatic weekly reviews send selected task activity to OpenAI. Turn them off anytime in Profile.", "muted");
-    form.append(emailLabel, codeLabel, privacy, aiNotice, submit, changeEmail);
+    form.append(emailLabel, codeLabel, privacy, submit, changeEmail);
     section.append(heading, description, form, alert);
     root.replaceChildren(section);
   });

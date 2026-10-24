@@ -5,7 +5,7 @@ test("one terms checkbox covers the combined document and is remembered on this 
   await page.goto("/");
   await expect(page.getByRole("checkbox")).toHaveCount(1);
   await expect(page.getByRole("checkbox")).not.toBeChecked();
-  await expect(page.getByText("Free to use. Automatic weekly reviews", { exact: false })).toBeVisible();
+  await expect(page.getByText("Free to use. Automatic weekly reviews", { exact: false })).toHaveCount(0);
   await page.getByRole("button", { name: "Terms & Privacy", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Terms of use", exact: true })).toBeVisible();
