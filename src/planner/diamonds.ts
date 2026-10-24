@@ -138,31 +138,10 @@ function createIllumination(background: HTMLImageElement, width: number, height:
   return { canvas, context, texture };
 }
 
-function showCompletionMoment(reducedMotion: boolean): () => void {
-  const moment = document.createElement("div");
-  moment.className = "completion-moment";
-  moment.setAttribute("role", "status");
-  moment.setAttribute("aria-atomic", "true");
-  const title = document.createElement("h2");
-  title.textContent = "today you won.";
-  moment.append(title);
-  document.body.append(moment);
-  const cleanup = () => {
-    window.clearTimeout(timer);
-    moment.remove();
-    if (stopRain === cleanup) stopRain = undefined;
-  };
-  const timer = window.setTimeout(cleanup, reducedMotion ? 4200 : 5600);
-  stopRain = cleanup;
-  return cleanup;
-}
-
 export function rainDiamonds(): void {
   stopRain?.();
   if (document.hidden) return;
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const removeMoment = showCompletionMoment(motion.matches);
-  // Reduced-motion users still get a clear acknowledgement of their achievement.
   if (motion.matches) return;
 
   const canvas = document.createElement("canvas");
@@ -186,7 +165,6 @@ export function rainDiamonds(): void {
     clearTimeout(timeout);
     canvas.remove();
     illumination?.canvas.remove();
-    removeMoment();
     document.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("resize", cleanup);
     motion.removeEventListener("change", cleanup);
