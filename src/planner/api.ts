@@ -160,8 +160,11 @@ export class PlanningClient {
     if (status.accountKey) this.prepareQueue(status.accountKey);
     return status;
   }
-  async signIn(email: string, password: string): Promise<AuthStatus> {
-    const status = await this.request<AuthStatus>("sign_in", { email, password });
+  async sendCode(email: string): Promise<void> {
+    await this.request("send_code", { email });
+  }
+  async verifyCode(email: string, code: string): Promise<AuthStatus> {
+    const status = await this.request<AuthStatus>("verify_code", { email, code });
     if (status.accountKey) this.prepareQueue(status.accountKey);
     return status;
   }

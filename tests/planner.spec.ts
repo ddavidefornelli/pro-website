@@ -2,6 +2,55 @@ import { test, expect, openPlanner, addTask, synced, pendingCount, QUEUE_KEY, AU
 
 test.use({ signedIn: true });
 
+test("empty plans stay minimal and the header uses the new logo", async ({ page }) => {
+  await openPlanner(page);
+  const logo = page.getByRole("link", { name: "prune home" }).getByRole("img", { name: "prune" });
+  await expect(logo).toHaveAttribute("src", "/prune-logo.png");
+  expect(await logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+  for (const view of ["Today", "Tomorrow"]) {
+    await page.getByRole("navigation").getByRole("button", { name: view, exact: true }).click();
+    await expect(page.getByRole("main", { name: view, exact: true })).toBeVisible();
+    await expect(page.locator(".empty-plan")).toHaveCount(0);
+    await expect(page.getByText("Choose up to three outcomes.", { exact: false })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add task", exact: true })).toBeVisible();
+  }
+});
+
+test("task entry uses an inline desktop estimate and a cancellable mobile estimate dialog", async ({ page, backend }) => {
+  for (const width of [1100, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await openPlanner(page);
+    const form = page.locator(".task-form");
+    const input = (await form.locator("input").boundingBox())!;
+    const add = (await form.getByRole("button", { name: "Add task", exact: true }).boundingBox())!;
+    expect(input.x + input.width).toBeLessThanOrEqual(add.x);
+    expect(Math.abs(input.y - add.y)).toBeLessThanOrEqual(2);
+    if (width >= 760) {
+      const dial = (await form.getByRole("slider").boundingBox())!;
+      expect(dial.x).toBeGreaterThanOrEqual(input.x + input.width);
+      expect(dial.x + dial.width).toBeLessThanOrEqual(add.x);
+      expect(Math.abs(dial.y - add.y)).toBeLessThanOrEqual(2);
+    } else {
+      await expect(form.getByRole("slider")).toHaveCount(0);
+      await form.getByRole("textbox", { name: "Outcome", exact: true }).fill("Keep my draft");
+      await form.getByRole("button", { name: "Add task", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "How much time will this task take to complete?" });
+      await expect(dialog).toBeInViewport({ ratio: 1 });
+      await dialog.getByRole("slider").press("ArrowUp");
+      await expect(dialog.getByRole("slider")).toHaveAttribute("aria-valuenow", "35");
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(dialog).toBeHidden();
+      await expect(form.getByRole("textbox", { name: "Outcome", exact: true })).toHaveValue("Keep my draft");
+      expect(backend.requests.filter((request) => request.body.p_action === "create_task")).toHaveLength(0);
+      await form.getByRole("button", { name: "Add task", exact: true }).click();
+      await dialog.getByRole("button", { name: "Add task", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Edit task title: Keep my draft" })).toBeVisible();
+      await synced(page);
+      expect(backend.data.todayTasks[0]!.estimatedMinutes).toBe(35);
+    }
+  }
+});
+
 test("plans three tasks, chooses a priority, focuses, pauses with a reason and completes", async ({ page, backend }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openPlanner(page);
@@ -26,7 +75,7 @@ test("plans three tasks, chooses a priority, focuses, pauses with a reason and c
   await page.locator("#focus-timer").click();
   await expect(page.locator("#focus-timer")).not.toHaveClass(/is-paused/);
   await page.getByRole("button", { name: "Complete task", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
   await synced(page);
   await expect(page.locator(".task").filter({ hasText: "Ship the update" })).toContainText("completed");
   expect(JSON.stringify(backend.requests)).not.toContain("Private scratchpad");
@@ -54,24 +103,22 @@ test("Tomorrow is available immediately; titles and estimates persist through re
   await expect(page.locator(".task").getByRole("slider")).toHaveAttribute("aria-valuenow", "35");
 });
 
-test("web resources use safe links and Mac file paths are clearly desktop-only", async ({ page, backend }) => {
-  backend.data.todayTasks.push({ id: "local-task", outcome: "Read a trusted document", plannedFor: backend.data.today, estimatedMinutes: 30, actualSeconds: 0, status: "planned", startedAt: null, completedOn: null, createdAt: backend.data.serverNow, isPriority: true, resources: [{ id: "local-file", kind: "file", label: "Notes.pdf", target: "/Users/me/Notes.pdf" }] });
+test("Mac resource metadata remains inert and is preserved when editing a task on the web", async ({ page, backend }) => {
+  const resources = [
+    { id: "local-file", kind: "file" as const, label: "Notes.pdf", target: "/Users/me/Notes.pdf" },
+    { id: "hostile-link", kind: "link" as const, label: "Untrusted link", target: "javascript:alert(document.cookie)" },
+  ];
+  backend.data.todayTasks.push({ id: "local-task", outcome: "Read a trusted document", plannedFor: backend.data.today, estimatedMinutes: 30, actualSeconds: 0, status: "planned", startedAt: null, completedOn: null, createdAt: backend.data.serverNow, isPriority: true, resources: structuredClone(resources) });
   await openPlanner(page);
-  const card = page.locator(".task");
-  await card.getByRole("textbox", { name: "Add a link; press Enter to save" }).fill("https://example.com/docs");
-  await card.getByRole("button", { name: "Add link", exact: true }).click();
-  await synced(page);
-  await card.getByRole("button", { name: "Resources (2)", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("Notes.pdf · Open in the Mac app");
-  const link = page.getByRole("link", { name: "example.com/docs", exact: true });
-  await expect(link).toHaveAttribute("href", "https://example.com/docs");
-  await expect(link).toHaveAttribute("target", "_blank");
-  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(page.locator('a[href^="file:"], a[href^="javascript:"]')).toHaveCount(0);
+  await expect(page.getByText("/Users/me/Notes.pdf", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Add a link; press Enter to save" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Attach file", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Close resources" }).click();
-  await card.getByRole("textbox", { name: "Add a link; press Enter to save" }).fill("https://user:password@example.com");
-  await card.getByRole("button", { name: "Add link", exact: true }).click();
-  expect(await card.locator('input[type="url"]').evaluate((input: HTMLInputElement) => input.validationMessage)).toContain("without a username or password");
+  await page.getByRole("button", { name: "Edit task title: Read a trusted document" }).click();
+  await page.getByRole("textbox", { name: "Task title", exact: true }).fill("Read it in the Mac app");
+  await page.getByRole("textbox", { name: "Task title", exact: true }).press("Enter");
+  await synced(page);
+  expect(backend.data.todayTasks[0]!.resources).toEqual(resources);
 });
 
 test("offline actions survive reload and sync in order without storing tokens in the outbox", async ({ page, backend }) => {
@@ -132,19 +179,22 @@ test("rejected cross-device changes stay visible until explicitly discarded", as
   await expect(page.locator(".task")).toHaveCount(0);
 });
 
-test("weekly AI is opt-in, previews work, and cooldown errors do not interrupt planning", async ({ page, backend }) => {
+test("weekly AI is opt-in and previews this week without replacing saved reviews", async ({ page, backend }) => {
   await openPlanner(page);
   expect(backend.requests.filter((request) => request.path.includes("/functions/"))).toHaveLength(0);
   await page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true }).click();
   await page.getByRole("button", { name: "Enable weekly AI reviews", exact: true }).click();
   await expect.poll(() => backend.weekly.settings.enabled).toBe(true);
-  await page.getByRole("button", { name: "Review this week so far", exact: true }).click();
+  await page.getByRole("button", { name: "Preview this week", exact: true }).click();
   await expect(page.locator(".review-preview")).toContainText("Keep your first focus session small.");
+  await expect(page.locator(".review-preview")).toContainText("This week so far — preview");
   const preview = backend.requests.find((request) => request.path.includes("/functions/") && request.body.preview);
   expect(Object.keys(preview!.body).sort()).toEqual(["preview", "timezone"]);
+  expect(backend.weekly.reviews).toHaveLength(0);
   backend.previewStatus = 429;
-  await page.getByRole("button", { name: "Review this week so far", exact: true }).click();
+  await page.getByRole("button", { name: "Preview this week", exact: true }).click();
   await expect(page.locator(".review-preview [role=alert]")).toContainText("10 minutes");
+  await expect(page.locator(".review-preview")).toContainText("Keep your first focus session small.");
   await page.getByRole("navigation").getByRole("button", { name: "Today", exact: true }).click();
   await addTask(page, "AI outages do not block work");
   await synced(page);
@@ -168,8 +218,8 @@ test("profile stats and local-only sign-out preserve pending work and sign out o
   await expect(page.getByRole("heading", { name: "All time", exact: true })).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-  await expect(second.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send code" })).toBeVisible();
+  await expect(second.getByRole("button", { name: "Send code" })).toBeVisible();
   expect(await page.evaluate((key) => localStorage.getItem(key), AUTH_KEY)).toBeNull();
   expect(JSON.parse((await page.evaluate((key) => localStorage.getItem(key), QUEUE_KEY))!).pending).toHaveLength(1);
   expect(backend.requests.some((request) => request.path === "/auth/v1/logout?scope=local")).toBe(true);

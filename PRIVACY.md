@@ -1,10 +1,10 @@
 # prune Privacy Policy
 
-Version: privacy-web-v1
+Version: privacy-web-v2
 
 Status: Draft — web adaptation; operator review required before public release.
 
-Last updated: 22 October 2026
+Last updated: 24 October 2026
 
 This notice explains how personal data is processed when you use prune, a web and desktop planner. This version describes the website; the Mac application presents its own notice. It follows the transparency structure of Articles 13 and 14 of the EU General Data Protection Regulation (GDPR). It is not a request to consent to all processing, a waiver of your rights, or a guarantee of regulatory compliance.
 
@@ -16,9 +16,9 @@ Privacy requests, account deletion and support: fornelli.dv@gmail.com. Please us
 
 ## 2. What data do we process, and where does it come from?
 
-- Account and authentication data: the email you provide, your account identifier, sign-in/session records and authentication tokens. Supabase handles email-and-password authentication. Your password is sent to Supabase for verification; the website does not store it in browser storage or planner data. This website uses the Supabase browser client to keep your session, including refresh and access tokens, in this browser's localStorage. This is not macOS Keychain storage: scripts running on this website's origin can access it. The desktop app uses a separate native credential store.
+- Account and authentication data: the email you provide, your account identifier, sign-in/session records and authentication tokens. Supabase handles email-code authentication. Your email is sent to Supabase to request a one-time sign-in code; the code you enter is sent to Supabase for verification. The website does not use an account password and does not save the code in browser storage or planner data. This website uses the Supabase browser client to keep your session, including refresh and access tokens, in this browser's localStorage. This is not macOS Keychain storage: scripts running on this website's origin can access it. The desktop app uses a separate native credential store.
 - Planner data you enter and activity derived from it: task titles, priorities, estimates, planned and completion dates, task status, timer timestamps and recorded focus time, written stop reasons, and completion statistics. The device supplies an IANA timezone for scheduling and local dates. This is not GPS or precise-location collection.
-- Resource metadata: labels, filenames, URLs and absolute local file paths you attach to tasks. This metadata syncs to Supabase and may contain personal or confidential information. Attached file contents are not uploaded by prune, and prune does not scan your other files. The website can add web links but cannot attach or open absolute Mac file paths; local attachments must be opened in the desktop app.
+- Resource metadata: labels, filenames, URLs and absolute local file paths you attach to tasks. This metadata syncs to Supabase and may contain personal or confidential information. Attached file contents are not uploaded by prune, and prune does not scan your other files. The current website does not display or edit resources; existing metadata is still included in synced task data and the local cache. Add or open resources in the desktop app. The website cannot open absolute Mac file paths.
 - Local app data: an account/project-specific unencrypted planner snapshot and pending-action queue in browser localStorage, plus the privacy-notice version and acknowledgement time. The queue and server sync receipts can contain task text, reasons, resource metadata and mutation results. Sign-out does not erase the planner cache or pending actions.
 - Optional AI data: if you separately enable weekly AI, selected task titles, task identifiers, dates, status, estimates, recorded task time, stop identifiers and written stop reasons are sent to OpenAI. Saved weekly reports include the generated reflection and a source-activity snapshot. Resource links, paths, filenames and file contents are excluded from AI input; sensitive information typed directly into a title or reason is not automatically removed.
 - Support data: your email address, message and any attachments or diagnostics you choose to send when contacting us. Do not send sensitive task content unless necessary to resolve your request.
@@ -51,7 +51,7 @@ AI reflections can be inaccurate. They do not score task value, edit tasks or ti
 
 - Website hosting: Vercel when deployed there. The host delivers the web application and may process IP addresses, request timestamps and technical/security logs. Planner API requests go from your browser directly to Supabase, not through a Vercel planner proxy. The operator must review actual hosting regions, subprocessors and log retention before release.
 - Supabase: account authentication, hosted database, server functions and associated infrastructure, including applicable subprocessors. The operator reports using a hosted Supabase project on the Free plan with its database in Ireland.
-- This website’s password sign-in does not send transactional emails or sign-in codes.
+- Authentication email delivery: Supabase and the operator-configured transactional email provider process your email address, one-time sign-in messages and delivery/security metadata. The operator must identify the actual SMTP provider, its processing terms and retention before release.
 - OpenAI: selected activity for optional AI reflections, only after opt-in, including relevant API infrastructure and subprocessors.
 - Support email: messages you send to fornelli.dv@gmail.com and our replies.
 - Authorised operator personnel or professional advisers, only where necessary for support, security, service administration or legal duties, subject to appropriate confidentiality and access controls.

@@ -6,7 +6,7 @@ import { acknowledgePrivacy, hasPrivacyAcknowledgement } from "./privacy-state";
 import { privacyPolicyButton } from "./privacy";
 import { supportFooter } from "./support";
 
-/** Password sign-in with device-local privacy acknowledgement. */
+/** Email-code sign-in with device-local privacy acknowledgement. */
 export async function authenticate(root: HTMLElement, client: PlanningClient): Promise<AuthStatus> {
   let acknowledged = false;
   try { acknowledged = hasPrivacyAcknowledgement(localStorage); } catch { /* Show a recoverable storage error on submit. */ }
@@ -30,7 +30,6 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
   return new Promise((resolve) => {
     const section = element("section", undefined, "auth-panel");
     section.setAttribute("aria-labelledby", "signup-title");
-    const eyebrow = element("p", "LESS, BUT BETTER.", "auth-eyebrow");
     const heading = element("h1", "Make room for what matters.");
     heading.id = "signup-title";
     const description = element("p", "Sign in to plan three tasks, focus on one, and finish your day.", "auth-description");
@@ -47,13 +46,32 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     email.maxLength = 254;
     email.placeholder = "you@example.com";
     emailLabel.append(email);
-    const passwordLabel = element("label", "Password");
-    const password = element("input");
-    password.name = "password";
-    password.type = "password";
-    password.autocomplete = "current-password";
-    password.required = true;
-    passwordLabel.append(password);
+    const codeLabel = element("label", "Email code");
+    const code = element("input", undefined, "otp-input");
+    code.name = "code";
+    code.type = "text";
+    code.autocomplete = "one-time-code";
+    code.inputMode = "numeric";
+    code.pattern = "[0-9]+";
+    code.maxLength = 10;
+    codeLabel.append(code);
+    codeLabel.hidden = true;
+    let sentTo = "";
+    const changeEmail = element("button", "Use a different email");
+    changeEmail.type = "button";
+    changeEmail.hidden = true;
+    changeEmail.addEventListener("click", () => {
+      sentTo = "";
+      email.readOnly = false;
+      code.value = "";
+      code.required = false;
+      codeLabel.hidden = true;
+      changeEmail.hidden = true;
+      submit.textContent = "Send code";
+      notice.textContent = "";
+      alert.textContent = "";
+      email.focus();
+    });
 
     const privacy = element("label", undefined, "privacy-acknowledgement");
     const checkbox = element("input");
@@ -64,9 +82,9 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     privacyText.append("I have read the ", privacyPolicyButton("Privacy Policy"), ".");
     privacy.append(checkbox, privacyText);
     privacy.hidden = acknowledged;
-    const submit = element("button", "Sign in", "auth-submit");
+    const submit = element("button", "Send code", "auth-submit");
     submit.type = "submit";
-    const notice = element("p", "Use your existing account’s email and password. No sign-in emails or codes.", "auth-notice");
+    const notice = element("p", undefined, "auth-notice");
     notice.setAttribute("role", "status");
     const alert = element("p", configurationError || initialError, "error");
     alert.setAttribute("role", "alert");
@@ -78,7 +96,8 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       form.setAttribute("aria-busy", String(value));
       submit.disabled = value || !!configurationError;
       email.disabled = value;
-      password.disabled = value;
+      code.disabled = value;
+      changeEmail.disabled = value;
       checkbox.disabled = value;
     }
     form.addEventListener("submit", async (event) => {
@@ -94,17 +113,31 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
           privacy.hidden = true;
           checkbox.required = false;
         }
-        const account = await client.signIn(email.value.trim(), password.value);
+        if (!sentTo) {
+          const address = email.value.trim();
+          await client.sendCode(address);
+          sentTo = address;
+          email.readOnly = true;
+          codeLabel.hidden = false;
+          code.required = true;
+          changeEmail.hidden = false;
+          submit.textContent = "Verify code";
+          notice.textContent = `Enter the code sent to ${sentTo}. Check your spam folder too. To request another code, choose “Use a different email” and submit again.`;
+          return;
+        }
+        const account = await client.verifyCode(sentTo, code.value.trim());
         if (!account.email) throw new Error("Sign-in did not return an account. Please try again.");
-        password.value = "";
+        code.value = "";
         root.replaceChildren();
         resolve(account);
       } catch (error) { alert.textContent = errorMessage(error); }
-      finally { setBusy(false); }
+      finally {
+        setBusy(false);
+        if (sentTo && code.isConnected) code.focus();
+      }
     });
-    form.append(emailLabel, passwordLabel, privacy, submit);
-    section.append(eyebrow, heading, description, form, notice, alert,
-      element("p", "Your planner syncs with the Mac app. Optional AI reviews stay off until you enable them.", "auth-footnote"));
+    form.append(emailLabel, codeLabel, privacy, submit, changeEmail);
+    section.append(heading, description, form, notice, alert);
     root.replaceChildren(section, supportFooter());
   });
 }

@@ -16,7 +16,8 @@ export default defineConfig({
     { name: "webkit", use: { browserName: "webkit" } },
   ],
   webServer: {
-    command: "npm run dev -- --port 4173 --strictPort",
+    // Exercise production output, keeping fixture configuration out of dist/.
+    command: "npm run build -- --outDir .playwright-dist && npm run preview -- --outDir .playwright-dist --port 4173 --strictPort",
     env: {
       VITE_SUPABASE_URL: "https://web-fixture.supabase.co",
       VITE_SUPABASE_ANON_KEY: "sb_publishable_fixture",

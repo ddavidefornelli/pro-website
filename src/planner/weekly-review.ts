@@ -148,9 +148,10 @@ export class WeeklyReviewPanel {
   private previewPanel(): HTMLElement {
     const section = node("section", undefined, "review-preview");
     section.setAttribute("aria-label", "Current week preview");
-    const button = this.button(this.previewing ? "Reviewing this week…" : "Review this week so far", () => this.generatePreview());
+    section.setAttribute("aria-busy", String(this.previewing));
+    const button = this.button(this.previewing ? "Analyzing this week…" : "Preview this week", () => this.generatePreview());
     button.disabled = this.previewing || this.saving || !this.data?.available;
-    section.append(button, node("p", "An optional current-week preview. Shown only in this session, not added to saved weekly reviews. Limited to 3 attempts per UTC day, at least 10 minutes apart.", "muted review-preview-label"));
+    section.append(button, node("p", "Get an early analysis of this week’s activity. This preview is only shown in this session and won’t replace your saved Sunday review. Limited to 3 attempts per UTC day, at least 10 minutes apart.", "muted review-preview-label"));
     if (this.previewError) {
       const error = node("p", this.previewError, "error");
       error.setAttribute("role", "alert");
@@ -161,12 +162,12 @@ export class WeeklyReviewPanel {
       status.setAttribute("role", "status");
       section.append(status);
     }
-    if (this.preview) section.append(node("h3", "This week so far"), this.report(this.preview));
+    if (this.preview) section.append(node("h3", "This week so far — preview"), this.report(this.preview));
     return section;
   }
 
   private async generatePreview(): Promise<void> {
-    if (this.previewing || !this.data?.settings.enabled) return;
+    if (this.previewing || !this.data?.settings.enabled || !this.data.available) return;
     const version = this.changeVersion;
     this.previewing = true;
     this.previewError = "";

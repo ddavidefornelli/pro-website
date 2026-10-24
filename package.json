@@ -9,10 +9,12 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
+    "build:vercel": "npm run build && node --experimental-strip-types scripts/build-vercel.ts",
     "preview": "vite preview --host 127.0.0.1",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --experimental-strip-types --test tests/*.test.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:production": "node --experimental-strip-types scripts/check-production.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

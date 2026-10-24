@@ -49,7 +49,7 @@ function authError(error: AuthError): CloudError {
   if (error.status === 429) return new CloudError("rate_limited", "Too many sign-in attempts. Wait at least a minute before trying again.");
   if (error.name === "AuthRetryableFetchError" || !error.status) return new CloudError("network", "Could not reach sign-in services. Check your connection and try again.");
   if (error.status >= 500) return new CloudError("server", "Sign-in services are temporarily unavailable. Please try later or contact support.");
-  return new CloudError("auth", "Sign-in could not be completed. Check your email and password and try again.");
+  return new CloudError("auth", "Sign-in could not be completed. Check your email and code, or request a new code and try again.");
 }
 
 /**
@@ -160,8 +160,14 @@ export class BrowserCloud {
     let result: unknown;
     switch (command) {
       case "auth_status": result = await this.status(); break;
-      case "sign_in": {
-        const { data, error } = await this.sdk().auth.signInWithPassword({ email: String(args.email), password: String(args.password) });
+      case "send_code": {
+        const { error } = await this.sdk().auth.signInWithOtp({ email: String(args.email) });
+        if (error) throw authError(error);
+        result = null;
+        break;
+      }
+      case "verify_code": {
+        const { data, error } = await this.sdk().auth.verifyOtp({ email: String(args.email), token: String(args.code), type: "email" });
         if (error) throw authError(error);
         if (!data.session || !data.user?.email || data.user.is_anonymous) throw new CloudError("auth", "The sign-in response was incomplete. Please try again.");
         this.accountKey = this.key(data.user.id);

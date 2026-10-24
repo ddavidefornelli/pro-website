@@ -2,6 +2,8 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+.playwright-dist/
+.vercel/
 .DS_Store
 *.local
 .env

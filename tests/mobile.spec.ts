@@ -11,8 +11,9 @@ test("touch-first signup and policy remain usable on a phone", async ({ page }, 
   await page.getByRole("button", { name: "Close privacy policy" }).tap();
   await page.getByRole("checkbox").check();
   await page.getByRole("textbox", { name: "Email address" }).fill("user@example.com");
-  await page.getByLabel("Password", { exact: true }).fill("correct-password");
-  await page.getByRole("button", { name: "Sign in" }).tap();
+  await page.getByRole("button", { name: "Send code" }).tap();
+  await page.getByLabel("Email code", { exact: true }).fill("12345678");
+  await page.getByRole("button", { name: "Verify code" }).tap();
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

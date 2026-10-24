@@ -10,7 +10,6 @@ import { isDayComplete, PLANNER_LIMITS, trackedSeconds } from "./planner";
 import { formatDuration } from "./time";
 import { focusDuration } from "../shared/task-timing";
 import { supportFooter } from "./support";
-import { safeResourceUrl } from "./config";
 
 type View = "today" | "focus" | "tomorrow" | "habits" | "profile";
 
@@ -86,7 +85,9 @@ class PlanningApplication {
     this.client.onQueueChange = updateSyncStatus;
     this.syncBar.append(this.syncLabel, discard);
     this.accountHost.replaceChildren(this.account);
-    this.root.append(this.navigation, this.syncBar, this.alert, this.content, supportFooter());
+    const navigationHeader = element("div", undefined, "navigation-header");
+    navigationHeader.append(this.navigation);
+    this.root.append(navigationHeader, this.syncBar, this.alert, this.content, supportFooter());
     updateSyncStatus();
     new ResizeObserver(() => this.updateNavigationIndicator()).observe(this.navigation);
     await this.refresh(true);
@@ -189,6 +190,7 @@ class PlanningApplication {
     this.navigation.classList.toggle("today-complete-selected", this.todayComplete && this.view === "today");
     this.updateNavigationIndicator();
     this.content.replaceChildren();
+    this.content.setAttribute("aria-label", { today: "Today", tomorrow: "Tomorrow", focus: "Focus", habits: "Overview", profile: "Profile" }[this.view]);
     if (this.view === "profile") {
       const profile = profilePage(this.email, this.data, () => this.signOut(), Math.floor((Date.now() + this.clockOffset) / 1000));
       profile.insertBefore(this.weeklyReview.settingsElement, profile.querySelector(".profile-footer"));
@@ -267,14 +269,8 @@ class PlanningApplication {
     const [year, month, date] = day.split("-");
     const dayLabel = element("time", `${date}/${month}/${year.slice(-2)}`, "plan-date");
     dayLabel.dateTime = day;
-    heading.append(element("h1", tomorrow ? "Tomorrow" : "Today"), dayLabel);
+    heading.append(dayLabel);
     this.content.append(heading);
-    if (!tasks.length) {
-      const empty = element("div", undefined, "empty-plan");
-      empty.append(element("h2", tomorrow ? "Give tomorrow a head start." : "A clear plan. A lighter day."),
-        element("p", "Choose up to three outcomes. Your first task is crowned as the most important; you can change it before starting.", "muted"));
-      this.content.append(empty);
-    }
     const list = element("ul", undefined, "task-list");
     const priorityCompleted = tasks.some((task) => task.isPriority && task.status === "completed");
     const canChoosePriority = tasks.every((task) => task.status === "planned");
@@ -298,7 +294,6 @@ class PlanningApplication {
           ),
         );
       }
-      details.append(this.renderResources(task));
       item.append(details);
       if (task.status === "planned") {
         const estimate = estimateDial(task.estimatedMinutes, async (minutes) => {
@@ -381,90 +376,6 @@ class PlanningApplication {
     return heading;
   }
 
-  private renderResources(task: Task): HTMLElement {
-    const section = element("section", undefined, "task-resources");
-    section.setAttribute("aria-label", `Resources for ${task.outcome}`);
-    let resourcesButton: HTMLButtonElement | undefined;
-    if (task.resources.length) {
-      // Resource collections can grow to 50 items. Keep them out of the page's
-      // height budget, but fully accessible in a bounded browser dialog.
-      const dialog = element("dialog", undefined, "resource-dialog");
-      dialog.setAttribute("aria-label", `Resources for ${task.outcome}`);
-      const list = element("ul", undefined, "resource-list");
-      for (const resource of task.resources) {
-        const row = element("li");
-        const url = resource.kind === "link" ? safeResourceUrl(resource.target) : null;
-        if (url) {
-          const open = element("a", resource.label, "resource-open");
-          open.href = url;
-          open.target = "_blank";
-          open.rel = "noopener noreferrer";
-          open.title = resource.target;
-          row.append(open);
-        } else {
-          const unavailable = element("span", `${resource.label} · ${resource.kind === "file" ? "Open in the Mac app" : "Invalid link"}`, "resource-open resource-unavailable");
-          row.append(unavailable);
-        }
-        if (this.canEditTask(task)) {
-          const remove = this.button("Remove", () => this.mutate(() => this.client.removeResource(task.id, resource.id)));
-          remove.setAttribute("aria-label", `Remove ${resource.label} from task`);
-          row.append(remove);
-        }
-        list.append(row);
-      }
-      dialog.append(element("h2", "Resources"), list,
-        this.button("Close resources", () => dialog.close()));
-      section.append(dialog);
-      resourcesButton = this.button(`Resources (${task.resources.length})`, () => dialog.showModal());
-      resourcesButton.className = "resource-count";
-      resourcesButton.setAttribute("aria-haspopup", "dialog");
-    }
-    if (!this.canEditTask(task)) {
-      if (resourcesButton) section.append(resourcesButton);
-      return section;
-    }
-    const form = element("form", undefined, "resource-form");
-    if (resourcesButton) form.classList.add("has-resources");
-    const url = element("input");
-    url.type = "url";
-    url.required = true;
-    url.maxLength = PLANNER_LIMITS.resourceTargetLength;
-    url.placeholder = "Paste a link and press Enter";
-    url.setAttribute("aria-label", "Add a link; press Enter to save");
-    url.disabled = this.busy;
-    const save = element("button", "Add link");
-    save.type = "submit";
-    save.className = "resource-save";
-    save.disabled = this.busy;
-    form.append(url, save);
-    if (resourcesButton) form.append(resourcesButton);
-    url.addEventListener("input", () => url.setCustomValidity(""));
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const target = url.value.trim();
-      if (new TextEncoder().encode(target).byteLength > PLANNER_LIMITS.resourceTargetLength) {
-        url.setCustomValidity("This link is too long. Use a shorter link.");
-        form.reportValidity();
-        return;
-      }
-      let parsed: URL;
-      try {
-        parsed = new URL(target);
-        if (!/^https?:\/\//i.test(target) || !["http:", "https:"].includes(parsed.protocol)
-          || !parsed.hostname || parsed.username || parsed.password || /[\u0000-\u0020\u007f]/.test(target)) throw new Error("Invalid link");
-      } catch {
-        url.setCustomValidity("Use an HTTP or HTTPS link without a username or password. Local-file attachments are available in the Mac app.");
-        form.reportValidity();
-        return;
-      }
-      if (!form.reportValidity()) return;
-      const label = `${parsed.hostname}${parsed.pathname === "/" ? "" : parsed.pathname}`.slice(0, PLANNER_LIMITS.resourceLabelLength);
-      void this.mutate(() => this.client.addLink(task.id, label, target), form);
-    });
-    section.append(form);
-    return section;
-  }
-
   private renderForm(day: string): void {
     const form = element("form", undefined, "task-form");
     const outcomeLabel = element("label");
@@ -476,7 +387,6 @@ class PlanningApplication {
     outcome.placeholder = "Add an outcome";
     outcomeLabel.append(outcome);
     const estimate = estimateDial();
-    estimate.element.append(element("span", "min estimated · turn to adjust", "estimate-unit"));
     const submit = element("button", undefined, "add-task");
     const plus = decorativeSvg("0 0 24 24");
     plus.append(svgElement("path", { d: "M12 3v18M3 12h18" }));
@@ -485,18 +395,41 @@ class PlanningApplication {
     submit.title = "Add task";
     submit.setAttribute("aria-label", "Add task");
     submit.disabled = this.busy;
-    form.append(outcomeLabel, estimate.element, submit);
+    const estimateInline = element("div", undefined, "task-estimate-inline");
+    estimateInline.append(estimate.element);
+    form.append(outcomeLabel, estimateInline, submit);
+
+    const estimateDialog = element("dialog", undefined, "pause-dialog task-estimate-dialog");
+    estimateDialog.setAttribute("aria-labelledby", "task-estimate-question");
+    const dialogContent = element("div", undefined, "pause-form");
+    const question = element("h2", "How much time will this task take to complete?");
+    question.id = "task-estimate-question";
+    const mobileEstimate = estimateDial();
+    const confirm = this.button("Add task", () => {
+      estimateDialog.close();
+      void this.mutate(
+        () => this.client.create(outcome.value, day, mobileEstimate.minutes()),
+        form,
+      );
+    });
+    const cancel = this.button("Cancel", () => estimateDialog.close());
+    dialogContent.append(question, mobileEstimate.element, confirm, cancel);
+    estimateDialog.append(dialogContent);
     outcome.addEventListener("input", () => outcome.setCustomValidity(""));
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       outcome.setCustomValidity(outcome.value.trim() ? "" : "Please write an outcome for this task.");
       if (!form.reportValidity()) return;
+      if (window.matchMedia("(max-width: 759px)").matches) {
+        estimateDialog.showModal();
+        return;
+      }
       void this.mutate(
         () => this.client.create(outcome.value, day, estimate.minutes()),
         form,
       );
     });
-    this.content.append(form);
+    this.content.append(form, estimateDialog);
   }
 
   private renderFocus(): void {
@@ -509,7 +442,7 @@ class PlanningApplication {
     }
     const layout = element("div", undefined, "focus-layout");
     const details = element("div", undefined, "focus-details");
-    details.append(this.renderTaskTitle(task, "h1"), this.renderResources(task));
+    details.append(this.renderTaskTitle(task, "h1"));
     const notesSection = element("div", undefined, "focus-notes");
     const notesLabel = element("label", "Notes");
     const notes = element("textarea");

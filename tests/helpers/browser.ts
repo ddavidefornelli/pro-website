@@ -62,9 +62,12 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
       if (request.method() === "OPTIONS") { await route.fulfill({ status: 204, headers }); return; }
       const body = request.postDataJSON() ?? {};
       state.requests.push({ path: url.pathname + url.search, body, authorization: request.headers().authorization });
-      if (url.pathname === "/auth/v1/token" && url.searchParams.get("grant_type") === "password") {
-        if (state.failSignIn) { await send({ msg: "private upstream error" }, 500); return; }
-        const valid = body.email === user.email && body.password === "correct-password";
+      if (url.pathname === "/auth/v1/otp") {
+        await send(state.failSignIn ? { msg: "private upstream error" } : {}, state.failSignIn ? 500 : 200);
+        return;
+      }
+      if (url.pathname === "/auth/v1/verify") {
+        const valid = body.email === user.email && body.token === "12345678" && body.type === "email";
         await send(valid ? session() : { msg: "private upstream error", error_code: "invalid_credentials" }, valid ? 200 : 400);
         return;
       }
@@ -110,14 +113,17 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
   page: async ({ page, backend }, use) => {
     const errors: string[] = [];
     const unexpected: string[] = [];
+    const sameOriginTracking: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("request", (request) => {
       const url = new URL(request.url());
       if (!["127.0.0.1", "web-fixture.supabase.co"].includes(url.hostname)) unexpected.push(url.hostname);
+      if (/^\/_vercel\/(?:insights|speed-insights)(?:\/|$)/.test(url.pathname)) sameOriginTracking.push(url.pathname);
     });
     await use(page);
     expect(errors, "No uncaught browser exceptions").toEqual([]);
     expect(unexpected, "Private signup/planner must not load third-party trackers").toEqual([]);
+    expect(sameOriginTracking, "Private signup/planner must not send same-origin Vercel analytics").toEqual([]);
     void backend;
   },
 });
@@ -130,7 +136,11 @@ export async function openPlanner(page: Page) {
 }
 export async function addTask(page: Page, outcome: string) {
   await page.getByRole("textbox", { name: "Outcome", exact: true }).fill(outcome);
-  await page.getByRole("button", { name: "Add task", exact: true }).click();
+  await page.locator(".task-form").getByRole("button", { name: "Add task", exact: true }).click();
+  if (await page.evaluate(() => window.matchMedia("(max-width: 759px)").matches)) {
+    await page.getByRole("dialog", { name: "How much time will this task take to complete?" })
+      .getByRole("button", { name: "Add task", exact: true }).click();
+  }
   await expect(page.getByRole("button", { name: `Edit task title: ${outcome}`, exact: true })).toBeVisible();
 }
 export async function pendingCount(page: Page) {

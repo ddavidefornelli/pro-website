@@ -20,7 +20,7 @@ export default function App() {
     <>
       <header class="site-header">
         <a class="wordmark" href="/" aria-label="prune home">
-          <img src="/prunelogo.png" alt="prune" width="40" height="40" />
+          <img src="/prune-logo.png" alt="prune" width="120" height="48" />
         </a>
         <div class="site-actions">
           <div ref={accountActions} />
