@@ -5,7 +5,7 @@ import { actionButton, element } from "./dom";
 function policyContent(): HTMLElement {
   const article = element("article", undefined, "privacy-policy-content");
   article.tabIndex = 0;
-  article.setAttribute("aria-label", "Full privacy policy");
+  article.setAttribute("aria-label", "Full terms and privacy policy");
   let paragraph: string[] = [];
   let list: HTMLUListElement | null = null;
   const flush = () => {
@@ -31,7 +31,7 @@ export function showPrivacyPolicy(opener: HTMLElement | null = null): void {
   const dialog = element("dialog", undefined, "privacy-dialog");
   dialog.setAttribute("aria-labelledby", "privacy-policy-title");
   const header = element("header", undefined, "privacy-dialog-header");
-  const heading = element("h2", "Privacy Policy");
+  const heading = element("h2", "Terms & Privacy");
   heading.id = "privacy-policy-title";
   const close = actionButton("Close privacy policy", () => dialog.close());
   header.append(heading, close);
@@ -50,7 +50,7 @@ export function showPrivacyPolicy(opener: HTMLElement | null = null): void {
 }
 
 /** Works offline and without native authentication, including during a focus timer. */
-export function privacyPolicyButton(label = "Privacy Policy"): HTMLButtonElement {
+export function privacyPolicyButton(label = "Terms & Privacy"): HTMLButtonElement {
   const button = actionButton(label, () => showPrivacyPolicy(button));
   button.className = "privacy-policy-button";
   button.setAttribute("aria-haspopup", "dialog");

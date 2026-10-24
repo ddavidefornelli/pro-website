@@ -1,5 +1,5 @@
 /** Bump alongside PRIVACY.md whenever a newly presented notice is required. */
-export const PRIVACY_POLICY_VERSION = "privacy-web-v3";
+export const PRIVACY_POLICY_VERSION = "privacy-web-v5";
 export const PRIVACY_ACKNOWLEDGEMENT_KEY = "prune:privacy:acknowledgement";
 
 export interface PrivacyAcknowledgement {
@@ -7,7 +7,7 @@ export interface PrivacyAcknowledgement {
   acknowledgedAt: string;
 }
 
-/** This is a device-local notice acknowledgement, never optional-processing consent. */
+/** Device-local terms acceptance and privacy acknowledgement, never AI consent. */
 export function hasPrivacyAcknowledgement(storage: Pick<Storage, "getItem">): boolean {
   try {
     const saved: unknown = JSON.parse(storage.getItem(PRIVACY_ACKNOWLEDGEMENT_KEY) ?? "null");

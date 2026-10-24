@@ -72,7 +72,7 @@ test("an outdated notice gates even a saved session, and the full policy is avai
   }, { authKey: AUTH_KEY, savedSession: session(), privacyKey: PRIVACY_ACKNOWLEDGEMENT_KEY });
   await page.goto("/");
   await expect(page.getByRole("checkbox")).not.toBeChecked();
-  await page.getByRole("button", { name: "Privacy Policy", exact: true }).first().click();
+  await page.getByRole("button", { name: "Terms & Privacy", exact: true }).first().click();
   await expect(page.getByRole("dialog")).toContainText("browser's localStorage");
   await expect(page.getByRole("dialog")).toContainText("not macOS Keychain");
   await page.getByRole("button", { name: "Close privacy policy" }).click();

@@ -38,7 +38,7 @@ export class WeeklyReviewPanel {
     const version = this.changeVersion;
     try {
       const next = await this.client.weeklyOverview();
-      // A read started before a consent change must not overwrite the action's newer state.
+      // A read started before a preference change must not overwrite the newer state.
       if (version !== this.changeVersion) return;
       const changed = JSON.stringify(next) !== JSON.stringify(this.data);
       this.data = next;
@@ -91,23 +91,21 @@ export class WeeklyReviewPanel {
       return;
     }
     const settings = node("details", undefined, "weekly-settings");
-    settings.open = settingsOpen ?? (!data.settings.enabled || !data.available);
-    settings.append(node("summary", data.settings.enabled ? "Review settings & privacy" : "AI settings & privacy"));
-    settings.append(node("p", "Weekly AI is optional. Choosing Enable weekly AI reviews gives separate consent to send task titles, dates, status, estimates, recorded task time, and your written stop reasons to OpenAI for a weekly reflection. Attached resources, their links/paths, and their file contents are excluded; sensitive text written directly in a title or reason is still sent. Task value is not scored. You can withdraw consent at any time using Disable weekly AI; your planner will still work. See the Privacy Policy for provider, retention and transfer details.", "muted"));
+    settings.open = settingsOpen ?? false;
+    settings.append(node("summary", "Weekly review settings"));
+    settings.append(node("p", "Weekly reviews run automatically using selected planner activity processed by OpenAI. You can turn them off at any time without affecting tasks or timers. See the Privacy Policy for data, provider and retention details.", "muted"));
     settings.append(privacyPolicyButton());
     settings.append(node("p", `Model: ${data.model} · Hosted AI ${data.available ? "enabled" : "temporarily unavailable"}`, "muted"));
-    settings.append(node("p", "Planner data, including resource paths, is stored in Supabase for your signed-in account. Enabling AI additionally allows the selected activity to be processed by OpenAI. Saved reviews and their source snapshots remain in your account until removed; provider and backup retention policies also apply.", "muted"));
-    const toggle = this.button(data.settings.enabled ? "Disable weekly AI" : "Enable weekly AI reviews", () => this.setEnabled(!data.settings.enabled));
+    const toggle = this.button(data.settings.enabled ? "Turn off weekly reviews" : "Turn on weekly reviews", () => this.setEnabled(!data.settings.enabled));
     toggle.disabled = this.saving;
     settings.append(toggle);
-    settings.append(node("p", "Reviews appear Sunday at 4:00 p.m. in your local timezone while prune is open, or at the next launch. They cover Monday through the time of generation; later Sunday activity is not included. If several weeks were missed, only the latest due week is reviewed. Disabling stops future requests; saved reviews remain in your account. A request already sent cannot be recalled.", "muted"));
+    settings.append(node("p", "Reviews appear Sunday at 4:00 p.m. in your local timezone while prune is open, or at the next launch.", "muted"));
     this.settingsElement.replaceChildren(settings);
     if (this.error && settingsInProfile) showError(this.settingsElement);
-    // Consent stays visible before opt-in; ongoing preferences live in Profile.
-    if (!data.settings.enabled && !this.settingsElement.isConnected) this.element.append(this.settingsElement);
+    // Review preferences live in Profile; Overview stays focused on reports.
 
     const messages: Record<WeeklyOverview["status"], string> = {
-      disabled: "Weekly AI is off. Enable it above to receive a weekly reflection.",
+      disabled: "Weekly reviews are off. You can turn them on in Profile.",
       unavailable: "Hosted weekly AI is temporarily unavailable. Your planner is unaffected.",
       pending: `Your review for ${this.range(data.week.start, data.week.end)} is queued.`,
       running: `Reviewing ${this.range(data.week.start, data.week.end)}… You can keep using prune.`,
@@ -117,7 +115,7 @@ export class WeeklyReviewPanel {
     };
     const status = node("p", messages[data.status], data.status === "failed" ? "error" : "muted");
     status.setAttribute("role", "status");
-    if (data.status === "failed" || data.status === "pending" || data.status === "running" || data.status === "unavailable") {
+    if (data.status === "disabled" || data.status === "failed" || data.status === "pending" || data.status === "running" || data.status === "unavailable") {
       this.element.append(status);
     } else {
       settings.append(status);
@@ -247,7 +245,7 @@ export class WeeklyReviewPanel {
       this.schedulePoll();
     }
     if (enabled && !this.error && this.data?.settings.enabled) {
-      // Opt-in may catch up a due review, but never creates an early preview.
+      // Resuming may catch up a due review, but never creates an early preview.
       await this.client.generateIfDue().catch(() => { /* Automatic retries handle transient failures. */ });
       await this.refresh();
     }

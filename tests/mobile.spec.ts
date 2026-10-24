@@ -6,7 +6,7 @@ test("touch-first signup and policy remain usable on a phone", async ({ page }, 
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Email address" })).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: `test-results/${info.project.name}-mobile-signup.png`, fullPage: true });
-  await page.getByRole("button", { name: "Privacy Policy", exact: true }).first().tap();
+  await page.getByRole("button", { name: "Terms & Privacy", exact: true }).first().tap();
   await expect(page.getByRole("dialog")).toBeInViewport({ ratio: 1 });
   await page.getByRole("button", { name: "Close privacy policy" }).tap();
   await page.getByRole("checkbox").check();

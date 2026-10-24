@@ -69,7 +69,7 @@ export class BrowserCloud {
     if (this.client) return this.client;
     // Constructing the SDK can restore/refresh a saved session. Defer even that
     // until the device-local notice has been durably acknowledged.
-    if (!hasPrivacyAcknowledgement(localStorage)) throw new CloudError("privacy", "Read and acknowledge the Privacy Policy before continuing.");
+    if (!hasPrivacyAcknowledgement(localStorage)) throw new CloudError("privacy", "Accept the Terms & Privacy before continuing.");
     this.config = webConfig();
     this.client = createClient(this.config.url, this.config.publicKey, {
       auth: {

@@ -179,11 +179,24 @@ test("rejected cross-device changes stay visible until explicitly discarded", as
   await expect(page.locator(".task")).toHaveCount(0);
 });
 
-test("weekly AI is opt-in and has no manual preview",  async ({ page, backend }) => {
+test("weekly reviews are automatic, can be turned off in Profile, and have no manual preview", async ({ page, backend }) => {
   await openPlanner(page);
   expect(backend.requests.filter((request) => request.path.includes("/functions/"))).toHaveLength(0);
   await page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true }).click();
-  await page.getByRole("button", { name: "Enable weekly AI reviews", exact: true }).click();
+  expect(backend.weekly.settings.enabled).toBe(true);
+  await expect(page.locator(".review-countdown")).toBeVisible();
+  expect(backend.requests.some((request) => request.body.p_action === "set_weekly_ai_enabled")).toBe(false);
+  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await page.getByText("Weekly review settings", { exact: true }).click();
+  await page.getByRole("button", { name: "Turn off weekly reviews", exact: true }).click();
+  await expect.poll(() => backend.weekly.settings.enabled).toBe(false);
+  await page.reload();
+  await page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true }).click();
+  await expect(page.getByText("Weekly reviews are off. You can turn them on in Profile.")).toBeVisible();
+  expect(backend.weekly.settings.enabled).toBe(false);
+  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await page.getByText("Weekly review settings", { exact: true }).click();
+  await page.getByRole("button", { name: "Turn on weekly reviews", exact: true }).click();
   await expect.poll(() => backend.weekly.settings.enabled).toBe(true);
   await expect(page.getByRole("button", { name: "Preview this week", exact: true })).toHaveCount(0);
   await expect(page.locator(".review-preview")).toHaveCount(0);

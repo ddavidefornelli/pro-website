@@ -102,7 +102,7 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     checkbox.name = "privacy";
     checkbox.required = !acknowledged;
     const privacyText = element("span");
-    privacyText.append("I have read the ", privacyPolicyButton("Privacy Policy"), ".");
+    privacyText.append("I accept the ", privacyPolicyButton("Terms & Privacy"), ".");
     privacy.append(checkbox, privacyText);
     privacy.hidden = acknowledged;
     const submit = element("button", "Send code", "auth-submit");
@@ -129,7 +129,7 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       try {
         if (!acknowledged) {
           try { acknowledgePrivacy(localStorage); }
-          catch { throw new Error("Could not save your privacy acknowledgement. Allow browser storage and try again. No sign-in request was sent."); }
+          catch { throw new Error("Could not save your terms acceptance. Allow browser storage and try again. No sign-in request was sent."); }
           acknowledged = true;
           privacy.hidden = true;
           checkbox.required = false;
@@ -158,7 +158,8 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
         if (sentTo && code.isConnected) code.focus();
       }
     });
-    form.append(emailLabel, codeLabel, privacy, submit, changeEmail);
+    const aiNotice = element("p", "Free to use. Automatic weekly reviews send selected task activity to OpenAI. Turn them off anytime in Profile.", "muted");
+    form.append(emailLabel, codeLabel, privacy, aiNotice, submit, changeEmail);
     section.append(heading, description, form, alert);
     root.replaceChildren(section);
   });

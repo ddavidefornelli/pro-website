@@ -30,7 +30,7 @@ After acknowledging the notice, enter your email, then enter the one-time code s
 
 - Today and Tomorrow: up to three tasks per day; titles, estimates, and most-important-task selection. Tomorrow is available immediately. Desktop resource metadata is preserved, but the current web UI does not display or edit resources.
 - Focus: one active task, timestamp-based timer, pause/resume, written stop reasons, completion, and an in-memory-only notes scratchpad. Pause before switching views, just like the Mac app.
-- Overview: completion calendar, optional scheduled weekly AI reviews, saved report history, and current-week previews. Previews are session-only and retain the server's cooldowns/quotas.
+- Overview: completion calendar, automatic scheduled weekly AI reviews, saved report history, and current-week previews. Previews are session-only and retain the server's cooldowns/quotas.
 - Profile: all-time/recent stats, streaks, AI preferences and sign-out.
 - Durable local snapshot/outbox: optimistic local saves, ordered automatic retries, idempotent requests, cross-device conflict handling and multi-tab coordination with Web Locks. A failed local save is not reported as success. Only definitively rejected changes can be discarded.
 - Phone-first layouts: touch-sized controls, 16px form inputs, stacked focus screen, bounded dialogs, safe-area padding, and natural vertical scrolling when the viewport or software keyboard is short.
@@ -136,7 +136,9 @@ After deployment, run `npm run check:production` with the matching public config
 
 ### Privacy before public release
 
-`PRIVACY.md` is the Mac notice adapted for browser storage and web hosting, with a distinct `privacy-web-v2` acknowledgement. **Its web adaptation is marked Draft and needs operator/legal review before public release**, including actual hosting/log retention and processor arrangements. Notice acknowledgement is not AI consent. AI remains a separate account-level opt-in, off for new accounts.
+`PRIVACY.md` combines plain-language terms for the free service with the privacy notice, browser storage details and automatic weekly AI disclosures. One unchecked sign-in checkbox records terms acceptance and privacy acknowledgement (`privacy-web-v5`) on this browser profile; the same version is not requested again unless site storage is cleared or another browser is used. This is not an account-wide legal acceptance register. **It remains Draft and requires operator/legal review before public release**, including the legitimate-interest assessment for default-on AI, hosting/log retention and processor arrangements. Notice acknowledgement is not AI consent.
+
+Apply `supabase/migrations/20261024000100_automatic_weekly_reviews.sql` after the shared backend migrations before deploying this client. It enables reviews for newly provisioned planner accounts and preserves all existing account preferences (including disabled reviews). It affects all clients using this shared backend. Legacy backend `consent_*` fields remain protocol compatibility gates, not evidence of affirmative consent. Do not automatically enable existing disabled accounts from the browser. Users can turn reviews off or back on in Profile.
 
 Google Ads, GoatCounter and Vercel analytics from the old marketing page are not loaded in this private signup/planner interface. Production CSP permits only integrity-pinned, build-hashed scripts. Account export/deletion remain manual support requests, as in the Mac app; no new automated deletion/export feature is claimed.
 
@@ -188,7 +190,7 @@ src/planner/browser.ts        Supabase browser auth + bounded authenticated HTTP
 src/planner/api.ts            Typed planner API and persistent queue integration
 src/planner/main.ts           Ported planner/focus UI; desktop resource data preserved
 src/planner/local-queue.ts    Ported durable outbox + browser-tab refresh handling
-src/planner/weekly-review.ts  Saved weekly reports, consent and current-week preview
+src/planner/weekly-review.ts  Saved weekly reports and review preferences
 src/planner/styles.css       Original Mac UI styling
 src/styles.css               Mobile-first web layout and shell overrides
 src/shared/task-timing.ts    Shared timing comparison logic copied from the Mac app
