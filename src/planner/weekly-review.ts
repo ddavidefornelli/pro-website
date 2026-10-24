@@ -2,7 +2,6 @@ import { PlanningClient, type ReviewStop, type WeeklyOverview, type WeeklyReview
 
 import { actionButton, element as node } from "./dom";
 import { reviewCountdown } from "./review-countdown";
-import { errorMessage } from "./errors";
 import { averageTaskTiming, focusDuration } from "../shared/task-timing";
 
 /** Hide internal citations in saved reports too; structured evidence remains available. */
@@ -19,10 +18,6 @@ export class WeeklyReviewPanel {
   private saving = false;
   private changeVersion = 0;
   private error = "";
-  private previewing = false;
-  private preview: WeeklyReview | null = null;
-  private previewNoData = false;
-  private previewError = "";
 
   private pollTimer: number | undefined;
 
@@ -129,11 +124,7 @@ export class WeeklyReviewPanel {
       settings.append(node("p", `Next scheduled update: ${this.date(data.week.nextUpdate)} at 4:00 p.m. local time. ${data.developmentUnlimited ? "Development mode: no request cooldown or usage cap." : "Failed requests retry at most hourly; successful reviews are not regenerated."}`, "muted"));
     }
     if (data.settings.enabled) {
-      this.element.append(this.countdown(), this.previewPanel());
-    } else {
-      this.preview = null;
-      this.previewNoData = false;
-      this.previewError = "";
+      this.element.append(this.countdown());
     }
     data.reviews.forEach((review, index) => {
       if (index === 0) this.element.append(this.report(review));
@@ -143,46 +134,6 @@ export class WeeklyReviewPanel {
         this.element.append(history);
       }
     });
-  }
-
-  private previewPanel(): HTMLElement {
-    const section = node("section", undefined, "review-preview");
-    section.setAttribute("aria-label", "Current week preview");
-    section.setAttribute("aria-busy", String(this.previewing));
-    const button = this.button(this.previewing ? "Analyzing this week…" : "Preview this week", () => this.generatePreview());
-    button.disabled = this.previewing || this.saving || !this.data?.available;
-    section.append(button, node("p", "Get an early analysis of this week’s activity. This preview is only shown in this session and won’t replace your saved Sunday review. Limited to 3 attempts per UTC day, at least 10 minutes apart.", "muted review-preview-label"));
-    if (this.previewError) {
-      const error = node("p", this.previewError, "error");
-      error.setAttribute("role", "alert");
-      section.append(error);
-    }
-    if (this.previewNoData) {
-      const status = node("p", "No activity to review this week yet. No AI request was made.", "muted");
-      status.setAttribute("role", "status");
-      section.append(status);
-    }
-    if (this.preview) section.append(node("h3", "This week so far — preview"), this.report(this.preview));
-    return section;
-  }
-
-  private async generatePreview(): Promise<void> {
-    if (this.previewing || !this.data?.settings.enabled || !this.data.available) return;
-    const version = this.changeVersion;
-    this.previewing = true;
-    this.previewError = "";
-    this.render();
-    try {
-      const result = await this.client.previewReview();
-      if (version !== this.changeVersion || !this.data?.settings.enabled) return;
-      this.preview = result.review ?? null;
-      this.previewNoData = result.noData === true;
-    } catch (error) {
-      if (version === this.changeVersion) this.previewError = errorMessage(error, "Could not create a preview. Your planner is unaffected.");
-    } finally {
-      this.previewing = false;
-      this.render();
-    }
   }
 
   private report(review: WeeklyReview): HTMLElement {
