@@ -11,7 +11,7 @@ export default function App() {
       const message = document.createElement("p");
       message.className = "error";
       message.setAttribute("role", "alert");
-      message.textContent = "prune could not start. Reload to try again. Do not clear browser storage if you have unsynced changes. If this continues, contact fornelli.dv@gmail.com.";
+      message.textContent = "prune could not start. Reload to try again. Do not clear browser storage if you have unsynced changes.";
       planner.replaceChildren(message);
     });
   });

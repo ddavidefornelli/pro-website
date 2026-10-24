@@ -61,6 +61,13 @@ test("the displayed privacy version matches its gate and accurately describes em
   assert.ok(!policy.includes("does not send transactional emails"));
 });
 
+test("public support surfaces do not publish a personal email or email contact link", () => {
+  for (const path of ["../src/planner/support.ts", "../src/App.tsx", "../PRIVACY.md"]) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /mailto:|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, path);
+  }
+});
+
 test("HTML entry point contains no marketing trackers or remote executable dependencies", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.ok(!/googletagmanager|goatcounter|google-analytics|gc\.zgo\.at|vercel-scripts/i.test(html));

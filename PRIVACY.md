@@ -1,6 +1,6 @@
 # prune Privacy Policy
 
-Version: privacy-web-v2
+Version: privacy-web-v3
 
 Status: Draft — web adaptation; operator review required before public release.
 
@@ -12,7 +12,7 @@ This notice explains how personal data is processed when you use prune, a web an
 
 The data controller is Davide Fornelli, established in Italy, operating prune. In this notice, “we”, “us” and “our” mean that controller.
 
-Privacy requests, account deletion and support: fornelli.dv@gmail.com. Please use the subject “prune privacy request” and, where possible, write from the email associated with your account. Do not send your sign-in code, passwords or unnecessary identity documents.
+A public contact channel for privacy requests, account deletion and support is not currently available. The operator must provide an accessible contact channel before public release. Do not send sign-in codes, passwords or unnecessary identity documents.
 
 ## 2. What data do we process, and where does it come from?
 
@@ -41,7 +41,7 @@ Acknowledging this notice is not consent to optional AI, advertising or unrelate
 
 Enabling weekly AI is a separate, affirmative account setting. The server records the AI notice version and opt-in time and checks the account setting before allowing generation. Weekly reviews run when due while a signed-in client is open, or catch up on the next launch. The consent also covers a current-week preview if that feature is made available; previews are not added to saved review history.
 
-Open Profile and choose “Disable weekly AI” to withdraw consent at any time. Withdrawal prevents new generation reservations and prevents in-flight results being saved if the consent revision has changed. It does not recall data already transmitted to OpenAI, erase previous reviews automatically, or affect the lawfulness of processing before withdrawal. Requests already sent and provider security/retention obligations may continue to apply. You can request erasure of existing reviews and source snapshots using the privacy contact above; their continued retention after withdrawal must be assessed when handling that request.
+Open Profile and choose “Disable weekly AI” to withdraw consent at any time. Withdrawal prevents new generation reservations and prevents in-flight results being saved if the consent revision has changed. It does not recall data already transmitted to OpenAI, erase previous reviews automatically, or affect the lawfulness of processing before withdrawal. Requests already sent and provider security/retention obligations may continue to apply. You can request erasure of existing reviews and source snapshots through a privacy contact channel once one is available; their continued retention after withdrawal must be assessed when handling that request.
 
 The OpenAI API is called with store: false. This is not a promise of zero retention, no international transfers, or a particular provider training policy. The operator must verify the applicable API agreement, project controls and provider retention before enabling hosted AI.
 
@@ -53,7 +53,6 @@ AI reflections can be inaccurate. They do not score task value, edit tasks or ti
 - Supabase: account authentication, hosted database, server functions and associated infrastructure, including applicable subprocessors. The operator reports using a hosted Supabase project on the Free plan with its database in Ireland.
 - Authentication email delivery: Supabase and the operator-configured transactional email provider process your email address, one-time sign-in messages and delivery/security metadata. The operator must identify the actual SMTP provider, its processing terms and retention before release.
 - OpenAI: selected activity for optional AI reflections, only after opt-in, including relevant API infrastructure and subprocessors.
-- Support email: messages you send to fornelli.dv@gmail.com and our replies.
 - Authorised operator personnel or professional advisers, only where necessary for support, security, service administration or legal duties, subject to appropriate confidentiality and access controls.
 - Public authorities or other recipients only where required by applicable law or necessary to establish, exercise or defend legal claims, with the applicable legal basis and safeguards.
 
@@ -82,7 +81,7 @@ We may retain only the data necessary for a specific legal obligation or legal c
 
 Subject to the applicable legal conditions, you can request access and a copy of your personal data; correction of inaccurate data; erasure; restriction of processing; and portability of data you provided that we process automatically on consent or contract grounds, in a structured, commonly used, machine-readable format. You may object to processing based on legitimate interests and withdraw AI consent as described above. If we introduce direct marketing, you have an unconditional right to object to it.
 
-Email fornelli.dv@gmail.com to request access, an export, correction or deletion of your account/data. There is currently no in-app account-deletion or export button. We may need proportionate information to verify account ownership and clarify your request, but will not ask you to send a sign-in code or unnecessary identity documents. We must communicate the action taken without undue delay and normally within one month of receipt; any lawful extension of up to two further months for complexity or volume must be explained within the first month. Requests are normally free; statutory exceptions are limited.
+A contact channel for requests for access, export, correction or deletion of your account/data must be provided before public release; none is currently published on this website. There is currently no in-app account-deletion or export button. We may need proportionate information to verify account ownership and clarify your request, but will not ask you to send a sign-in code or unnecessary identity documents. We must communicate the action taken without undue delay and normally within one month of receipt; any lawful extension of up to two further months for complexity or volume must be explained within the first month. Requests are normally free; statutory exceptions are limited.
 
 Account deletion removes the Auth account and associated active-database planner rows, reviews, source snapshots, sync receipts and private AI request records through cascading deletion. Aggregate non-account usage counters can remain. Backup, provider-log and device-local copies follow section 7. Sync or export any work you want to keep before requesting deletion. We will explain any data we cannot lawfully erase and the reason/retention period.
 
