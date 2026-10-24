@@ -1,5 +1,6 @@
 import { PlanningClient, type Dashboard, type Task } from "./api";
 import { estimateDial } from "./estimate-dial";
+import { rainDiamonds } from "./diamonds";
 import { ActivityCalendar } from "./activity-calendar";
 import { WeeklyReviewPanel } from "./weekly-review";
 import { authenticate } from "./auth";
@@ -9,13 +10,11 @@ import { errorMessage } from "./errors";
 import { isDayComplete, PLANNER_LIMITS, trackedSeconds } from "./planner";
 import { formatDuration } from "./time";
 import { focusDuration } from "../shared/task-timing";
-import { supportFooter } from "./support";
 
 type View = "today" | "focus" | "tomorrow" | "habits" | "profile";
 
 const FOCUS_RING_RADIUS = 54;
 const FOCUS_RING_CIRCUMFERENCE = 2 * Math.PI * FOCUS_RING_RADIUS;
-const CONFETTI_COLORS = ["#30d158", "#0a84ff", "#ffd60a", "#ff375f", "#bf5af2"];
 const PLANNER_BUTTONS = ".account-bar button, nav button, main button";
 
 class PlanningApplication {
@@ -84,10 +83,10 @@ class PlanningApplication {
     };
     this.client.onQueueChange = updateSyncStatus;
     this.syncBar.append(this.syncLabel, discard);
-    this.accountHost.replaceChildren(this.account);
+    this.accountHost.replaceChildren();
     const navigationHeader = element("div", undefined, "navigation-header");
     navigationHeader.append(this.navigation);
-    this.root.append(navigationHeader, this.syncBar, this.alert, this.content, supportFooter());
+    this.root.append(navigationHeader, this.syncBar, this.alert, this.content);
     updateSyncStatus();
     new ResizeObserver(() => this.updateNavigationIndicator()).observe(this.navigation);
     await this.refresh(true);
@@ -214,20 +213,7 @@ class PlanningApplication {
   }
 
   private celebrate(): void {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const confetti = element("div", undefined, "confetti");
-    confetti.setAttribute("aria-hidden", "true");
-    for (let i = 0; i < 250; i++) {
-      const piece = element("span");
-      piece.style.left = `${Math.random() * 100}%`;
-      piece.style.backgroundColor = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-      piece.style.setProperty("--drift", `${(Math.random() - 0.5) * 300}px`);
-      piece.style.animationDelay = `${Math.random() * 1.5}s`;
-      piece.style.animationDuration = `${2.5 + Math.random() * 1.5}s`;
-      confetti.append(piece);
-    }
-    document.body.append(confetti);
-    window.setTimeout(() => confetti.remove(), 6000);
+    rainDiamonds();
   }
 
   private updateNavigationIndicator(): void {
@@ -275,8 +261,15 @@ class PlanningApplication {
     const priorityCompleted = tasks.some((task) => task.isPriority && task.status === "completed");
     const canChoosePriority = tasks.every((task) => task.status === "planned");
     for (const task of tasks) {
-      const item = element("li", undefined, `task${task.isPriority ? " is-priority" : ""}`);
-      const crown = this.button("👑", () => this.mutate(() => this.client.prioritize(task.id)));
+      const item = element("li", undefined, `task${task.isPriority ? " is-priority" : ""}${!tomorrow && task.status === "completed" ? " is-completed" : ""}`);
+      const crown = this.button("", () => this.mutate(() => this.client.prioritize(task.id)));
+      const crownIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      crownIcon.setAttribute("viewBox", "0 0 24 24");
+      crownIcon.setAttribute("aria-hidden", "true");
+      const crownPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      crownPath.setAttribute("d", "M3 6 7 10 12 3 17 10 21 6 19 18H5L3 6ZM5 21H19");
+      crownIcon.append(crownPath);
+      crown.append(crownIcon);
       crown.className = "task-crown";
       crown.setAttribute("aria-label", task.isPriority ? "Most important task" : "Make most important task");
       crown.setAttribute("aria-pressed", String(task.isPriority));
@@ -536,6 +529,9 @@ class PlanningApplication {
   }
 
   private renderHabits(): void {
+    const heading = element("div", undefined, "overview-heading");
+    heading.append(this.account);
+    this.content.append(heading);
     this.activityCalendar.update(this.data!.today, this.data!.completions);
     this.content.append(
       this.activityCalendar.element,

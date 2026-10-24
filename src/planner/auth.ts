@@ -4,7 +4,6 @@ import { errorMessage } from "./errors";
 import { webConfig } from "./config";
 import { acknowledgePrivacy, hasPrivacyAcknowledgement } from "./privacy-state";
 import { privacyPolicyButton } from "./privacy";
-import { supportFooter } from "./support";
 
 /** Email-code sign-in with device-local privacy acknowledgement. */
 export async function authenticate(root: HTMLElement, client: PlanningClient): Promise<AuthStatus> {
@@ -20,7 +19,7 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     const ring = element("span", undefined, "startup-ring");
     ring.setAttribute("aria-hidden", "true");
     loading.append(ring);
-    root.replaceChildren(loading, supportFooter());
+    root.replaceChildren(loading);
     try {
       const status = await client.authStatus();
       if (status.email) { root.replaceChildren(); return status; }
@@ -49,12 +48,34 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     const codeLabel = element("label", "Email code");
     const code = element("input", undefined, "otp-input");
     code.name = "code";
+    code.setAttribute("aria-label", "Email code");
     code.type = "text";
     code.autocomplete = "one-time-code";
     code.inputMode = "numeric";
-    code.pattern = "[0-9]+";
-    code.maxLength = 10;
-    codeLabel.append(code);
+    code.pattern = "[0-9]{8}";
+    code.minLength = 8;
+    code.maxLength = 8;
+    const codeBoxes = element("div", undefined, "email-code-boxes");
+    const digits = Array.from({ length: 8 }, () => {
+      const digit = element("span", undefined, "email-code-digit");
+      digit.setAttribute("aria-hidden", "true");
+      return digit;
+    });
+    function updateCodeBoxes(): void {
+      const active = Math.min(code.selectionStart ?? code.value.length, 7);
+      digits.forEach((digit, index) => {
+        digit.textContent = code.value[index] ?? "";
+        digit.classList.toggle("is-active", index === active);
+      });
+    }
+    code.addEventListener("input", () => {
+      const sanitized = code.value.replace(/\D/g, "").slice(0, 8);
+      if (code.value !== sanitized) code.value = sanitized;
+      updateCodeBoxes();
+    });
+    for (const event of ["focus", "click", "keyup", "select"]) code.addEventListener(event, updateCodeBoxes);
+    codeBoxes.append(code, ...digits);
+    codeLabel.append(codeBoxes);
     codeLabel.hidden = true;
     let sentTo = "";
     const changeEmail = element("button", "Use a different email");
@@ -64,11 +85,13 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       sentTo = "";
       email.readOnly = false;
       code.value = "";
+      updateCodeBoxes();
       code.required = false;
       codeLabel.hidden = true;
+      heading.hidden = false;
+      description.hidden = false;
       changeEmail.hidden = true;
       submit.textContent = "Send code";
-      notice.textContent = "";
       alert.textContent = "";
       email.focus();
     });
@@ -84,8 +107,6 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     privacy.hidden = acknowledged;
     const submit = element("button", "Send code", "auth-submit");
     submit.type = "submit";
-    const notice = element("p", undefined, "auth-notice");
-    notice.setAttribute("role", "status");
     const alert = element("p", configurationError || initialError, "error");
     alert.setAttribute("role", "alert");
     if (configurationError) submit.disabled = true;
@@ -119,10 +140,11 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
           sentTo = address;
           email.readOnly = true;
           codeLabel.hidden = false;
+          heading.hidden = true;
+          description.hidden = true;
           code.required = true;
           changeEmail.hidden = false;
           submit.textContent = "Verify code";
-          notice.textContent = `Enter the code sent to ${sentTo}. Check your spam folder too. To request another code, choose “Use a different email” and submit again.`;
           return;
         }
         const account = await client.verifyCode(sentTo, code.value.trim());
@@ -137,7 +159,7 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       }
     });
     form.append(emailLabel, codeLabel, privacy, submit, changeEmail);
-    section.append(heading, description, form, notice, alert);
-    root.replaceChildren(section, supportFooter());
+    section.append(heading, description, form, alert);
+    root.replaceChildren(section);
   });
 }

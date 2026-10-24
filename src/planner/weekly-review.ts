@@ -2,6 +2,7 @@ import { PlanningClient, type ReviewStop, type WeeklyOverview, type WeeklyReview
 
 import { actionButton, element as node } from "./dom";
 import { reviewCountdown } from "./review-countdown";
+import { privacyPolicyButton } from "./privacy";
 import { averageTaskTiming, focusDuration } from "../shared/task-timing";
 
 /** Hide internal citations in saved reports too; structured evidence remains available. */
@@ -92,7 +93,8 @@ export class WeeklyReviewPanel {
     const settings = node("details", undefined, "weekly-settings");
     settings.open = settingsOpen ?? (!data.settings.enabled || !data.available);
     settings.append(node("summary", data.settings.enabled ? "Review settings & privacy" : "AI settings & privacy"));
-    settings.append(node("p", "Weekly AI is optional. Choosing Enable weekly AI reviews gives separate consent to send task titles, dates, status, estimates, recorded task time, and your written stop reasons to OpenAI for a weekly reflection. Attached resources, their links/paths, and their file contents are excluded; sensitive text written directly in a title or reason is still sent. Task value is not scored. You can withdraw consent at any time using Disable weekly AI; your planner will still work. See the Privacy Policy in the footer for provider, retention and transfer details.", "muted"));
+    settings.append(node("p", "Weekly AI is optional. Choosing Enable weekly AI reviews gives separate consent to send task titles, dates, status, estimates, recorded task time, and your written stop reasons to OpenAI for a weekly reflection. Attached resources, their links/paths, and their file contents are excluded; sensitive text written directly in a title or reason is still sent. Task value is not scored. You can withdraw consent at any time using Disable weekly AI; your planner will still work. See the Privacy Policy for provider, retention and transfer details.", "muted"));
+    settings.append(privacyPolicyButton());
     settings.append(node("p", `Model: ${data.model} · Hosted AI ${data.available ? "enabled" : "temporarily unavailable"}`, "muted"));
     settings.append(node("p", "Planner data, including resource paths, is stored in Supabase for your signed-in account. Enabling AI additionally allows the selected activity to be processed by OpenAI. Saved reviews and their source snapshots remain in your account until removed; provider and backup retention policies also apply.", "muted"));
     const toggle = this.button(data.settings.enabled ? "Disable weekly AI" : "Enable weekly AI reviews", () => this.setEnabled(!data.settings.enabled));

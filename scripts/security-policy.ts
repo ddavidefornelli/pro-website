@@ -30,7 +30,7 @@ export function securityHeaders(apiOrigin: string, scriptHashes: string[]): Reco
     "style-src-attr 'none'",
     `connect-src ${API_PATHS.map((path) => `${apiOrigin}${path}`).join(" ")}`,
     "img-src 'self'",
-    "font-src 'none'",
+    "font-src 'self'",
     "manifest-src 'none'",
     "media-src 'none'",
     "object-src 'none'",

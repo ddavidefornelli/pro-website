@@ -30,7 +30,8 @@ test("CSP and SRI use hashes of exact emitted bytes, with no script host fallbac
   assert.ok(!built.headers["Content-Security-Policy"].includes("*"));
   assert.ok(!built.headers["Content-Security-Policy"].includes("unsafe-"));
   assert.equal(csp["style-src"], "'self'");
-  for (const name of ["default-src", "script-src-attr", "style-src-attr", "object-src", "child-src", "frame-src", "worker-src", "base-uri", "form-action", "font-src", "manifest-src", "media-src", "frame-ancestors"]) {
+  assert.equal(csp["font-src"], "'self'");
+  for (const name of ["default-src", "script-src-attr", "style-src-attr", "object-src", "child-src", "frame-src", "worker-src", "base-uri", "form-action", "manifest-src", "media-src", "frame-ancestors"]) {
     assert.equal(csp[name], "'none'", name);
   }
   assert.ok(!built.html.includes("frame-ancestors"), "HTTP-only directives do not belong in meta");

@@ -23,7 +23,12 @@ test("email-code sign-in handles invalid codes then restores the session without
   await page.getByRole("button", { name: "Send code", exact: true }).click();
   const code = page.getByLabel("Email code", { exact: true });
   await expect(code).toHaveAttribute("autocomplete", "one-time-code");
+  await expect(page.locator(".email-code-digit")).toHaveCount(8);
+  await expect(page.locator("#signup-title")).toBeHidden();
+  await expect(page.locator(".auth-description")).toBeHidden();
+  await expect(page.getByText("Check your spam folder", { exact: false })).toHaveCount(0);
   await code.fill("00000000");
+  await expect(page.locator(".email-code-digit")).toHaveText(Array(8).fill("0"));
   await page.getByRole("button", { name: "Verify code", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Check your email and code");
   await expect(page.getByRole("alert")).not.toContainText("private upstream error");
