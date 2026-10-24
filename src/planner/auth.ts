@@ -29,9 +29,9 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
   return new Promise((resolve) => {
     const section = element("section", undefined, "auth-panel");
     section.setAttribute("aria-labelledby", "signup-title");
-    const heading = element("h1", "Make room for what matters.");
+    const heading = element("h1", "Just Fucking Win.");
     heading.id = "signup-title";
-    const description = element("p", "Sign in to plan three tasks, focus on one, and finish your day.", "auth-description");
+    const description = element("p", "Plan three tasks, execute and win today.", "auth-description");
     const form = element("form", undefined, "signup-form");
     const emailLabel = element("label", "Email address");
     const email = element("input");
