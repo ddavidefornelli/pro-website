@@ -103,36 +103,20 @@ nav button[aria-current], nav button[aria-current]:hover:not(:disabled) { color:
 nav.today-complete-selected::before { background: var(--success); }
 nav button.day-complete { color: var(--success); }
 nav.today-complete-selected button.day-complete[aria-current] { color: #000; }
-.diamond-rain { position: fixed; inset: 0; z-index: 1000; overflow: hidden; pointer-events: none; }
-.diamond-rain::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, #e5f3ff14, transparent 65%); animation: diamond-atmosphere 3s ease-out both; }
-.falling-diamond { position: absolute; top: -70px; width: var(--size); aspect-ratio: 120 / 108; perspective: 400px; animation: diamond-fall 5s linear both; }
-.diamond-crystal { position: absolute; inset: 0; background: url("/diamond.svg") center / contain no-repeat; animation: diamond-turn var(--turn-duration) ease-in-out infinite alternate; animation-delay: var(--glint-delay); }
-.is-foreground .diamond-crystal { filter: drop-shadow(0 0 4px #e6f5ff50); }
-.diamond-crystal::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 38%, #ffffff60 47%, #fff 50%, #ffffff60 53%, transparent 62%); background-size: 350% 100%; clip-path: polygon(22% 7%, 78% 7%, 96% 33%, 50% 94%, 4% 33%); mix-blend-mode: screen; animation: diamond-glint 3.2s ease-in-out infinite; animation-delay: var(--glint-delay); }
-.is-foreground .diamond-crystal::before { content: ""; position: absolute; z-index: 1; top: 1%; left: 13%; width: 24%; aspect-ratio: 1; background: #fff; clip-path: polygon(50% 0, 57% 42%, 100% 50%, 57% 58%, 50% 100%, 43% 58%, 0 50%, 43% 42%); filter: drop-shadow(0 0 3px #fff); animation: diamond-spark 3.2s ease-in-out infinite; animation-delay: var(--glint-delay); }
-@keyframes diamond-fall {
-  0% { transform: translate3d(0, -70px, 0); opacity: 0; }
-  7%, 82% { opacity: var(--depth-opacity); }
-  100% { transform: translate3d(var(--drift), calc(100dvh + 140px), 0); opacity: 0; }
+.diamond-rain, .diamond-illumination { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.diamond-rain { z-index: 1000; }
+.diamond-illumination { z-index: -1; }
+.completion-moment { position: fixed; inset: 0; z-index: 1001; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; pointer-events: none; background: radial-gradient(ellipse at center, #000c, #0007 24%, transparent 58%); animation: completion-reveal 5.6s ease both; }
+.completion-moment > h2 { max-width: 100%; margin: 0; color: #fff; font-size: clamp(42px, 6.5vw, 88px); font-weight: 600; letter-spacing: -.055em; line-height: 1.08; text-wrap: balance; }
+@keyframes completion-reveal {
+  0% { opacity: 0; transform: translateY(12px); }
+  10%, 75% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-6px); }
 }
-@keyframes diamond-turn {
-  from { transform: rotate(var(--tilt)) rotateY(-40deg) rotateX(12deg); }
-  to { transform: rotate(calc(var(--tilt) + 55deg)) rotateY(40deg) rotateX(-15deg); }
+@media (prefers-reduced-motion: reduce) {
+  .diamond-rain, .diamond-illumination { display: none; }
+  .completion-moment { animation: none; }
 }
-@keyframes diamond-glint {
-  0%, 28% { background-position: 100% 0; opacity: 0; }
-  40% { opacity: .9; }
-  54%, 100% { background-position: 0 0; opacity: 0; }
-}
-@keyframes diamond-spark {
-  0%, 34%, 52%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); }
-  42% { opacity: 1; transform: scale(1.3) rotate(12deg); }
-}
-@keyframes diamond-atmosphere {
-  0%, 100% { opacity: 0; }
-  20% { opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) { .diamond-rain { display: none; } }
 button:disabled { opacity: .5; cursor: not-allowed; }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

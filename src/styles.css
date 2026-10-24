@@ -5,15 +5,15 @@
 }
 html { min-height: 100%; scroll-padding-top: 80px; }
 body { margin: 0; min-width: 280px; isolation: isolate; }
-/* Fill the viewport without distorting the logo; excess is cropped. */
+/* Keep the artwork behind content without affecting text or control opacity. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: url("/prune-background.png") center / cover no-repeat;
+  background: url("/prune-background.png") center / auto clamp(70svh, 50vw, 100svh) no-repeat;
   filter: grayscale(1);
-  opacity: .025;
+  opacity: .05;
   pointer-events: none;
 }
 body:has(#app.single-screen) { overflow: visible; }
