@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { hasMarketingTracker } from "./tracking-policy.ts";
 
 // Deliberately no origin-wide allowlist: do not permit Storage, arbitrary RPCs,
 // other Edge Functions, Realtime or another Supabase tenant.
@@ -54,28 +55,79 @@ export function securityHeaders(apiOrigin: string, scriptHashes: string[]): Reco
   };
 }
 
-/** Harden Vite's final HTML, failing closed if its output shape changes. */
-export function hardenHtml(html: string, assets: Map<string, string | Uint8Array>, apiOrigin: string): {
+// This is a strict contract for generated build tags, not an HTML sanitizer.
+// Reject duplicate/unknown attributes instead of guessing how a browser parses
+// them (e.g. data-src must never be mistaken for src).
+function assetAttributes(tag: string, element: "script" | "link"): Map<string, string> {
+  const opening = new RegExp(`^<${element}\\b([^>]*)>`, "i").exec(tag);
+  if (!opening) throw new Error("Unexpected HTML asset tag.");
+  const raw = opening[1]!.replace(/\s*\/$/, "");
+  const attributes = new Map<string, string>();
+  const pattern = /\s+([a-z][a-z0-9-]*)(?:="([^"<>]*)")?/gi;
+  const allowed = new Set(element === "script" ? ["type", "src", "crossorigin", "integrity"] : ["rel", "href", "crossorigin", "integrity", "type", "sizes"]);
+  let end = 0;
+  for (const match of raw.matchAll(pattern)) {
+    const name = match[1]!.toLowerCase();
+    if (match.index !== end || !allowed.has(name) || attributes.has(name) || (match[2] === undefined && name !== "crossorigin")) {
+      throw new Error("Unexpected or duplicate HTML asset attribute.");
+    }
+    attributes.set(name, match[2] ?? "");
+    end = match.index + match[0].length;
+  }
+  if (raw.slice(end).trim() || (attributes.has("crossorigin") && !["", "anonymous"].includes(attributes.get("crossorigin")!))) {
+    throw new Error("Unexpected HTML asset attributes or credential mode.");
+  }
+  return attributes;
+}
+
+/** Harden Vite's final HTML, or revalidate the exact artifact before packaging. */
+export function hardenHtml(html: string, assets: Map<string, string | Uint8Array>, apiOrigin: string, { verify = false } = {}): {
   html: string; headers: Record<string, string>;
 } {
+  if (hasMarketingTracker(html)) throw new Error("Marketing tracker integration in production HTML.");
+  for (const [path, content] of assets) {
+    if (/\.(?:[cm]?js|css|html|json)$/i.test(path) && hasMarketingTracker(typeof content === "string" ? content : new TextDecoder().decode(content))) {
+      throw new Error(`Marketing tracker integration in built asset: ${path}`);
+    }
+  }
   const hashes: string[] = [];
-  const assetIntegrity = (tag: string, attribute: "src" | "href"): string => {
-    const path = new RegExp(`\\b${attribute}="(/assets/[^"?#]+)"`).exec(tag)?.[1];
-    const content = path && assets.get(path.slice(1));
-    if (!content || /\bintegrity\s*=/i.test(tag)) throw new Error("Cannot integrity-pin an unexpected HTML asset.");
-    return integrity(content);
+  const assetIntegrity = (tag: string, element: "script" | "link"): string => {
+    const attributes = assetAttributes(tag, element);
+    const script = element === "script";
+    const path = attributes.get(script ? "src" : "href");
+    const content = path && /^\/assets\/[A-Za-z0-9_.-]+\.(?:js|css)$/.test(path) && assets.get(path.slice(1));
+    if (!content || !path?.endsWith(script ? ".js" : ".css") || attributes.get(script ? "type" : "rel") !== (script ? "module" : "stylesheet")) {
+      throw new Error("Cannot integrity-pin an unexpected HTML asset.");
+    }
+    const hash = integrity(content);
+    if (verify ? attributes.get("integrity") !== hash : attributes.has("integrity")) {
+      throw new Error("Missing, unexpected or mismatched asset integrity.");
+    }
+    return hash;
   };
   html = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, (tag) => {
     if (!/^<script\b[^>]*\btype="module"[^>]*>\s*<\/script>$/i.test(tag)) {
       throw new Error("Production HTML may contain only external module entry scripts.");
     }
-    const hash = assetIntegrity(tag, "src");
+    const hash = assetIntegrity(tag, "script");
     hashes.push(hash);
-    return tag.replace("<script ", `<script integrity="${hash}" `);
+    return verify ? tag : tag.replace(/^<script\b/i, `<script integrity="${hash}"`);
   });
-  html = html.replace(/<link\b[^>]*\brel="stylesheet"[^>]*>/gi, (tag) =>
-    tag.replace("<link ", `<link integrity="${assetIntegrity(tag, "href")}" `));
-  if ((html.match(/<script\b/gi) ?? []).length !== hashes.length || /<style\b|\s(?:style|on\w+)\s*=/i.test(html)) {
+  html = html.replace(/<link\b[^>]*>/gi, (tag) => {
+    const attributes = assetAttributes(tag, "link");
+    if (attributes.get("rel") !== "stylesheet") {
+      // Only non-executable, same-origin icon metadata is expected alongside
+      // styles. Do not silently miss a differently quoted/encoded stylesheet,
+      // module preload or a newly introduced resource hint.
+      if (!["icon", "apple-touch-icon"].includes(attributes.get("rel") ?? "") || !/^\/(?!\/)[A-Za-z0-9_./-]+$/.test(attributes.get("href") ?? "")) {
+        throw new Error("Unexpected production HTML link.");
+      }
+      return tag;
+    }
+    const hash = assetIntegrity(tag, "link");
+    return verify ? tag : tag.replace(/^<link\b/i, `<link integrity="${hash}"`);
+  });
+  if ((html.match(/<script\b/gi) ?? []).length !== hashes.length || /<style\b|<base\b|\s(?:style|on\w+)\s*=/i.test(html)) {
     throw new Error("Unexpected inline executable content in production HTML.");
   }
   const headers = securityHeaders(apiOrigin, hashes);
@@ -85,7 +137,16 @@ export function hardenHtml(html: string, assets: Map<string, string | Uint8Array
   const metaPolicy = headers["Content-Security-Policy"]!
     .replace("; frame-ancestors 'none'", "")
     .replace("; upgrade-insecure-requests", "");
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${metaPolicy}" />`;
+  const policies = html.match(/<meta\b[^>]*\bhttp-equiv\s*=\s*["']?Content-Security-Policy\b[^>]*>/gi) ?? [];
   if (!html.includes("<head>")) throw new Error("Production HTML has no head.");
-  html = html.replace("<head>", `<head>\n    <meta http-equiv="Content-Security-Policy" content="${metaPolicy}" />`);
+  if (verify) {
+    if (policies.length !== 1 || policies[0] !== meta || html.indexOf(meta) > html.search(/<script\b/i)) {
+      throw new Error("HTML meta policy does not match its HTTP security policy.");
+    }
+  } else {
+    if (policies.length) throw new Error("Production CSP must be generated, not supplied by the source HTML.");
+    html = html.replace("<head>", `<head>\n    ${meta}`);
+  }
   return { html, headers };
 }

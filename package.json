@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "build:vercel": "npm run build && node --experimental-strip-types scripts/build-vercel.ts",
+    "build:vercel": "node --experimental-strip-types scripts/build-release.mjs",
+    "check:deployment": "node --experimental-strip-types scripts/check-deployment.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --experimental-strip-types --test tests/*.test.mjs",

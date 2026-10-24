@@ -25,3 +25,9 @@ jobs:
       # Playwright builds a separate fixture-configured production artifact.
       # No Supabase/OpenAI/SMTP credentials or hosted requests are used in CI.
       - run: npm test
+      # Verify the actual deployment routes, headers, final bytes and trackers,
+      # not just Vite's preview server. Never publish this fixture-configured app.
+      - run: npm run build:vercel
+        env:
+          VITE_SUPABASE_URL: https://web-fixture.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_fixture

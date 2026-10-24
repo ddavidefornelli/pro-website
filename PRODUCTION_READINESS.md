@@ -34,6 +34,26 @@ The policy now hashes the final JavaScript, requires matching script/stylesheet 
 
 **No hosted deployment or hosted policy verification was performed for this follow-up.** The launch gates below remain required. Do not deploy with the old `dist/`-only Vercel configuration or enable host-injected scripts to work around a CSP error.
 
+## Deployment release-gate follow-up
+
+**The live-site failures were reproduced with read-only HTTPS GETs.** `https://www.prune.win` still serves the older marketing HTML on `/`, `/download`, `/download/` and `/index.html`, with recognized tracker integrations and missing enforced CSP/adjacent headers. Local builds do not change that deployment. No deployment, account changes, database probes or paid requests were made in this follow-up; this checkout has no Vercel project link.
+
+The release path now removes stale prebuilt output before compilation, revalidates complete HTML/script/stylesheet integrity and meta agreement, and verifies the generated Vercel route/header package using the same website assertions as the hosted checker. Known tracker integrations in emitted bundles and copied public text files fail the release. Failed compilation, packaging or security verification leaves no `.vercel/output/` to accidentally publish. CI exercises the gated release with public fixture settings, never deployable production credentials.
+
+Current local results:
+
+| Check | Observed result |
+| --- | --- |
+| `npm test` | **93 unit tests + 72 Chromium/WebKit browser tests passed** |
+| `npm run build:vercel` | **PASS; 62 packaged website assertions passed** |
+| `npm run check:deployment` | **PASS; 62 assertions against local output**, not a hosted HTTP/CDN test |
+| `npm audit --audit-level=low` | **0 known vulnerabilities** |
+| Hosted website-only check | **FAIL; old deployment remains live**, not production approval |
+
+New browser regressions verify GET/HEAD headers on every document alias (including query strings), same-origin anti-framing and modified stylesheet SRI. Unit regressions cover absent HTTP headers despite a valid meta fallback, download rewrites/no-store, altered final JavaScript/CSS, tracker-bearing copied files, unknown deployment routing and stale-output cleanup. The hosted checker now verifies all four document aliases and stylesheet integrity as well as scripts.
+
+**Still required:** deploy the current code and generated Build Output package using the correct production project/environment, disable host-injected analytics, confirm the domain targets that deployment, and rerun the real hosted checks. See [README.md](README.md#publish-and-verify-the-security-fix-on-vercel) for the authenticated Vercel release commands. Do not replace this gate with a `dist/`-only upload or regard local success as proof that the live website has been secured.
+
 ## Repository fixes made in this review
 
 - Fixed header shrink behavior so sign-in and planner views fit 280px+ screens while keeping Profile and Install for Mac usable.
@@ -47,7 +67,7 @@ The policy now hashes the final JavaScript, requires matching script/stylesheet 
 
 ## Required before inviting testers
 
-1. **Deploy this reviewed web application and headers.** Set only `VITE_SUPABASE_URL` and a public publishable/anon key in Vercel; use the checked-in **Other** framework / `npm run build:vercel` configuration and generated `.vercel/output/` Build Output API package. Clear old dashboard output/build overrides: publishing `dist/` alone discards the generated HTTP CSP. Deploy the current working changes, not just the old committed marketing version. Confirm `/` and `/download` no longer load marketing scripts. Disable any host-injected analytics for the private app. Re-run `npm run check:production`; it must pass for the canonical origin. If serving any other origin directly, add that exact origin to AI CORS while preserving desktop origins. Never add `*` as an authentication workaround.
+1. **Deploy this reviewed web application and headers.** Set only `VITE_SUPABASE_URL` and a public publishable/anon key in Vercel; use the checked-in **Other** framework / `npm run build:vercel` configuration and generated `.vercel/output/` Build Output API package. Clear old dashboard output/build overrides: publishing `dist/` alone discards the generated HTTP CSP. Deploy the current working changes, not just the old committed marketing version. Confirm `/` and `/download` no longer load marketing scripts. Disable any host-injected analytics for the private app. Re-run `npm run check:production -- --require-invite-only`; it must pass for the canonical origin, with no unreviewed errors or skipped required checks. If serving any other origin directly, add that exact origin to AI CORS while preserving desktop origins. Never add `*` as an authentication workaround.
 2. **Make the beta invite-only on the server.** Provision the intended accounts through trusted Supabase administration and disable new public signups. Test that existing users can still request email codes and an unknown email cannot register. This setting affects the shared Mac backend too. A hidden URL, UI email allowlist or CORS restriction is not signup protection. Mandatory CAPTCHA is not currently implemented in this client; do not enable a challenge without adding and testing that flow.
 3. **Verify the hosted backend, not just local source.** Run `supabase/security-audit.sql` in the linked hosted SQL Editor and review every result. Confirm all nine migrations through `20261019000100_tomorrow_available.sql` are applied, owner-only SELECT policies, no direct client writes, private internal RPCs, and `development_unlimited = false`. Apply only genuinely missing backend migrations from `../pro`; **do not reset or seed the production database**. Backend remains outside this web repo.
 4. **Do a real two-account isolation/sync smoke test.** Using two disposable tester-controlled accounts and separate browser profiles, create distinct private task markers. Verify account B sees no A data via its dashboard **or direct REST SELECT**, and cannot rename/start/complete A's known task ID. Verify the reverse too. Confirm unknown/expired bearer tokens are denied. Test Mac↔web synchronization, conflicting same-account edits, network loss/reconnect, refresh and multi-tab sign-out. Record results without recording codes or bearer tokens.
@@ -72,12 +92,14 @@ npm audit --audit-level=low
 npm test
 npm run test:e2e -- --repeat-each=3 --workers=10
 npm run build
-# Package exact build hashes + HTTP headers for Vercel (no deployment):
+# Compile, package and verify exact hashes + HTTP headers (no deployment):
 npm run build:vercel
+# Recheck the existing local package without rebuilding/deploying:
+npm run check:deployment
 # Shared backend, if the sibling checkout is present:
 npm --prefix ../pro run test:backend
 # Opt-in hosted, non-destructive release gate; no admin credentials:
-PRUNE_SITE_URL=https://www.prune.win npm run check:production
+PRUNE_SITE_URL=https://www.prune.win npm run check:production -- --require-invite-only
 ```
 
-The hosted check intentionally exits nonzero with the currently observed deployment/settings. Do not weaken that check to obtain a green launch result. Local tests and the script never substitute for the manual authenticated hosted smoke tests above.
+The hosted check still exits nonzero while the observed live deployment lacks its protections or serves tracker integrations. The rewritten checker separates confirmed failures (exit 1) from incomplete/configuration/network checks (exit 2), compares equivalent CSP formatting semantically, and reports public signup as a warning by default. The explicit `--require-invite-only` option above retains the closed-beta release gate. `--website-only` and `--skip-ai` visibly narrow scope rather than claiming full readiness. Do not suppress genuine failures to obtain a green launch result. Local tests and the script never substitute for the manual authenticated hosted smoke tests above.

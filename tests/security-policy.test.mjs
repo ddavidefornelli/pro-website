@@ -63,6 +63,48 @@ test("CSP generation fails closed for missing assets, inline scripts/styles or i
   }
 });
 
+test("generated asset tags reject ambiguous URLs, duplicate/unknown attributes and credentialed loads", () => {
+  for (const html of [
+    entry.replace('src="/assets/app.js"', 'data-src="/assets/app.js"'),
+    entry.replace('src="/assets/app.js"', 'src="/assets/app.js" src="/assets/app.js"'),
+    entry.replace('src="/assets/app.js"', 'src="/assets/app.js?changed=1"'),
+    entry.replace('src="/assets/app.js"', 'src="&#47;assets/app.js"'),
+    entry.replace('src="/assets/app.js"', 'src="/assets/app.js" data-integrity="ignored"'),
+    entry.replace('crossorigin src=', 'crossorigin="use-credentials" src='),
+    entry.replace('type="module"', 'type="text/javascript"'),
+    entry.replace('href="/assets/app.css"', 'data-href="/assets/app.css"'),
+    entry.replace('rel="stylesheet"', "rel='stylesheet'"),
+    entry.replace('rel="stylesheet"', 'rel="style&#115;heet"'),
+    entry.replace('rel="stylesheet"', 'rel="modulepreload"'),
+    entry.replace('</head>', '<base href="https://untrusted.invalid/"></head>'),
+    entry.replace('</head>', '<meta http-equiv="Content-Security-Policy" content="default-src *"></head>'),
+  ]) assert.throws(() => hardenHtml(html, assets, origin));
+});
+
+test("packaging revalidates complete HTML, styles, SRI and a single matching meta policy", () => {
+  const built = hardenHtml(entry, assets, origin);
+  assert.deepEqual(hardenHtml(built.html, assets, origin, { verify: true }), built);
+  for (const html of [
+    built.html.replace('</script>', 'globalThis.injected = true;</script>'),
+    built.html.replace('<body>', '<body onload="globalThis.injected = true">'),
+    built.html.replace('</head>', '<style>body{display:none}</style></head>'),
+    built.html.replace("default-src 'none'", "default-src 'self'"),
+    built.html.replace('</head>', '<meta http-equiv="Content-Security-Policy" content="default-src *"></head>'),
+    built.html.replace(/ integrity="[^"]+"/, ''),
+  ]) assert.throws(() => hardenHtml(html, assets, origin, { verify: true }));
+  for (const path of ["assets/app.js", "assets/app.css"]) {
+    assert.throws(() => hardenHtml(built.html, new Map([...assets, [path, "modified bytes"]]), origin, { verify: true }), /integrity/);
+  }
+});
+
+test("final HTML and bundle bytes fail closed on known tracking integrations", () => {
+  assert.throws(() => hardenHtml(entry.replace('</body>', '<script src="https://gc.zgo.at/count.js"></script></body>'), assets, origin), /tracker/);
+  for (const tracker of ['gtag("config", "fixture");', 'window.dataLayer = [];', 'fetch("/_vercel/insights/view");']) {
+    assert.throws(() => hardenHtml(entry, new Map([...assets, ["assets/app.js", tracker]]), origin), /tracker/);
+  }
+  assert.ok(hardenHtml(entry.replace('</body>', 'Google Ads and GoatCounter are not loaded.</body>'), assets, origin));
+});
+
 test("code splitting fails closed instead of weakening hash-only CSP", () => {
   const plugin = productionCsp(origin);
   for (const field of ["imports", "dynamicImports"]) {

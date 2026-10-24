@@ -50,6 +50,33 @@ test("normal planner, calendar and profile workflows do not violate CSP", async 
   expect(violations).toEqual([]);
 });
 
+cspTest("every document alias has enforced security headers on GET and HEAD, including query strings", async ({ request }) => {
+  const expected = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "cross-origin-opener-policy": "same-origin",
+    "cross-origin-resource-policy": "same-origin",
+    "cache-control": "no-store",
+    "strict-transport-security": "max-age=31536000",
+  };
+  let policy: string | undefined;
+  for (const path of ["/", "/download", "/download/", "/index.html", "/?security=1", "/download/?security=1"]) {
+    for (const method of ["GET", "HEAD"]) {
+      const response = await request.fetch(path, { method, maxRedirects: 0 });
+      expect(response.status(), `${method} ${path}`).toBe(200);
+      const headers = response.headers();
+      for (const [name, value] of Object.entries(expected)) expect(headers[name], `${method} ${path}: ${name}`).toBe(value);
+      expect(headers["content-type"]).toMatch(/^text\/html/);
+      expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+      expect(headers["content-security-policy"]).toMatch(/script-src 'sha384-[A-Za-z0-9+/]{64}'/);
+      policy ??= headers["content-security-policy"];
+      expect(headers["content-security-policy"]).toBe(policy);
+      if (method === "HEAD") expect(await response.body()).toHaveLength(0);
+    }
+  }
+});
+
 // Deliberate attack probes use the plain browser fixture: unlike normal app
 // tests, these intentionally provoke CSP/SRI errors and blocked requests.
 cspTest("production CSP blocks injected code, styles and unapproved backend connections", async ({ page, context }) => {
@@ -153,6 +180,28 @@ cspTest("modified JavaScript fails integrity verification instead of running", a
   expect(await page.evaluate(() => "__cspTampered" in globalThis)).toBe(false);
   await expect(page.locator("#root")).toBeEmpty();
   expect(requests).toEqual([]);
+});
+
+cspTest("modified CSS fails integrity verification while the trusted application still starts", async ({ page, context }) => {
+  await context.route("**/assets/*.css", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: `${await response.text()}\nbody { --csp-tampered: yes; }` });
+  });
+  await page.goto("/");
+  await expect(page.locator("#root")).not.toBeEmpty();
+  expect(await page.evaluate(() => getComputedStyle(document.body).getPropertyValue("--csp-tampered"))).toBe("");
+});
+
+cspTest("HTTP framing protections block even a same-origin parent without its own CSP", async ({ page, context }) => {
+  await context.route("**/csp-framing-parent", (route) => route.fulfill({
+    contentType: "text/html",
+    body: '<html><body><iframe src="/" onload="document.body.dataset.frameLoaded = \'true\'"></iframe></body></html>',
+  }));
+  const childResponse = page.waitForResponse("http://127.0.0.1:4173/");
+  await page.goto("/csp-framing-parent");
+  expect((await childResponse).headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  await expect(page.locator("body")).toHaveAttribute("data-frame-loaded", "true");
+  expect(await page.evaluate(() => !!document.querySelector("iframe")?.contentDocument?.getElementById("root"))).toBe(false);
 });
 
 cspTest("hash-approved code still cannot use eval, Function or string timers", async ({ page, context }) => {

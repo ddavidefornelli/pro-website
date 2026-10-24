@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-
-// Match executable integrations/endpoints, not explanatory privacy-policy text.
-const integrations = [
-  /(?:https?:)?\/\/(?:[\w-]+\.)*(?:googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|goatcounter\.com|gc\.zgo\.at|connect\.facebook\.net|static\.hotjar\.com|clarity\.ms)(?:[/:"'`\s]|$)/i,
-  /\b(?:gtag|fbq)\s*\(/,
-  /\b(?:window|globalThis)\.(?:dataLayer|goatcounter)\b/,
-  /\/_vercel\/(?:insights|speed-insights)(?:\/|["'`?\s]|$)/,
-  /["']@vercel\/(?:analytics|speed-insights)(?:\/[^"']*)?["']/,
-];
+import { hasMarketingTracker } from "../scripts/tracking-policy.ts";
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = new URL(entry.name, directory);
@@ -22,9 +14,7 @@ test("web source and public text assets contain no marketing tracking integratio
   const files = [new URL("../index.html", import.meta.url), ...sourceFiles(new URL("../src/", import.meta.url)), ...sourceFiles(new URL("../public/", import.meta.url))];
   for (const file of files) {
     const content = readFileSync(file, "utf8");
-    for (const integration of integrations) {
-      assert.ok(!integration.test(content), `Tracking integration found in ${file.pathname}`);
-    }
+    assert.ok(!hasMarketingTracker(content), `Tracking integration found in ${file.pathname}`);
   }
 });
 
