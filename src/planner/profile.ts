@@ -31,6 +31,7 @@ export function profilePage(
   data: Dashboard | null,
   signOut: () => Promise<void>,
   now: number,
+  deleteAccount: () => Promise<void>,
 ): HTMLElement {
   const section = node("section", undefined, "profile-page");
   section.setAttribute("aria-labelledby", "profile-heading");
@@ -69,7 +70,9 @@ export function profilePage(
   const footer = node("footer", undefined, "profile-footer");
   const button = actionButton("Sign out", signOut);
   button.className = "danger-button";
-  footer.append(button);
+  const deleteButton = actionButton("Delete account", deleteAccount);
+  deleteButton.className = "danger-button delete-account-button";
+  footer.append(button, node("p", "Deleting your account disables access immediately. Your data will be kept for 30 days before manual removal.", "muted"), deleteButton);
   section.append(footer);
   return section;
 }

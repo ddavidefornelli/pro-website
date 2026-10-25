@@ -8,6 +8,7 @@ export function httpError(status: number, value: unknown, review = false, previe
   const body = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
   const error = typeof body.error === "object" && body.error !== null ? body.error as Record<string, unknown> : {};
   if (status === 401 || body.code === "PT401") return new CloudError("unauthorized", "Your session has expired. Please sign in again.");
+  if (body.code === "PT403") return new CloudError("account_deleted", "This account has been marked for deletion and can no longer be used.");
   if (review) {
     const known: Record<string, string> = {
       rate_limited: preview ? "Preview limit reached. Allow 10 minutes between requests; at most 3 attempts per UTC day. Failed attempts count." : "The review retry allowance has been reached. Please try later.",

@@ -141,6 +141,10 @@ export class PlanningClient {
   private async request<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
     try { return await this.cloud.execute<T>(command, args); }
     catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "account_deleted") {
+        await this.cloud.execute("sign_out");
+        window.location.reload();
+      }
       if (this.accountKey && typeof error === "object" && error !== null && "code" in error && ["unauthorized", "account_changed"].includes(String(error.code))) {
         // Invalid credentials or another window's account switch must clear old UI state.
         window.location.reload();
@@ -155,23 +159,44 @@ export class PlanningClient {
     }
     return this.request("planner_call", { action, args: { ...args, ...(this.accountKey ? { _accountKey: this.accountKey } : {}) }, timezone: this.timezone });
   }
-  async authStatus(): Promise<AuthStatus> {
-    const status = await this.request<AuthStatus>("auth_status");
-    if (status.accountKey) this.prepareQueue(status.accountKey);
+  private async loadAccount(status: AuthStatus): Promise<AuthStatus> {
+    if (status.accountKey) {
+      const account = await this.request<{ isDeleted: boolean }>("planner_call", {
+        action: "account_status", args: { _accountKey: status.accountKey }, timezone: this.timezone,
+      });
+      if (account.isDeleted) {
+        await this.request("sign_out");
+        throw new Error("This account has been marked for deletion and can no longer be used.");
+      }
+      this.prepareQueue(status.accountKey);
+    }
     return status;
+  }
+  async authStatus(): Promise<AuthStatus> {
+    return this.loadAccount(await this.request<AuthStatus>("auth_status"));
   }
   async sendCode(email: string): Promise<void> {
     await this.request("send_code", { email });
   }
   async verifyCode(email: string, code: string): Promise<AuthStatus> {
-    const status = await this.request<AuthStatus>("verify_code", { email, code });
-    if (status.accountKey) this.prepareQueue(status.accountKey);
-    return status;
+    return this.loadAccount(await this.request<AuthStatus>("verify_code", { email, code }));
   }
   async signOut(): Promise<void> {
     await this.queue?.stop();
     try { await this.request("sign_out"); }
     catch (error) { this.queue?.resume(); throw error; }
+  }
+  async deleteAccount(): Promise<void> {
+    // Deletion is an online account operation, never an optimistic queued write.
+    await this.queue?.stop();
+    try {
+      const result = await this.request<{ isDeleted: boolean }>("planner_call", {
+        action: "delete_account", args: { _accountKey: this.accountKey }, timezone: this.timezone,
+      });
+      if (result?.isDeleted !== true) throw new Error("Account deletion was not confirmed. Please try again.");
+    } catch (error) { this.queue?.resume(); throw error; }
+    // Do not resume the outbox if local sign-out fails after confirmed deletion.
+    await this.request("sign_out");
   }
   private generatingReview = false;
   async generateIfDue(): Promise<void> {

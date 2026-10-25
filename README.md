@@ -31,7 +31,7 @@ After acknowledging the notice, enter your email, then enter the one-time code s
 - Today and Tomorrow: up to three tasks per day; titles, estimates, and most-important-task selection. Tomorrow is available immediately. Desktop resource metadata is preserved, but the current web UI does not display or edit resources.
 - Focus: one active task, timestamp-based timer, pause/resume, written stop reasons, completion, and an in-memory-only notes scratchpad. Pause before switching views, just like the Mac app.
 - Overview: completion calendar, automatic scheduled weekly AI reviews, saved report history, and current-week previews. Previews are session-only and retain the server's cooldowns/quotas.
-- Profile: all-time/recent stats, streaks, AI preferences and sign-out.
+- Profile: all-time/recent stats, streaks, AI preferences, sign-out and confirmed account deletion (soft-delete flag, followed by manual removal after 30 days).
 - Durable local snapshot/outbox: optimistic local saves, ordered automatic retries, idempotent requests, cross-device conflict handling and multi-tab coordination with Web Locks. A failed local save is not reported as success. Only definitively rejected changes can be discarded.
 - Phone-first layouts: touch-sized controls, 16px form inputs, stacked focus screen, bounded dialogs, safe-area padding, and natural vertical scrolling when the viewport or software keyboard is short.
 
@@ -55,6 +55,21 @@ Do **not** reset the Mac app's database or create a parallel account store. Poin
 ```
 
 Backend source, RLS, transactional planner rules, idempotent receipts, AI quotas and migrations remain in `../pro/supabase`. Apply any outstanding migrations there, including the local-queue protocol and `20261019000100_tomorrow_available.sql`. This website does not apply migrations or make administrative changes automatically. Provider secrets remain in the Edge Function, never in this repo's frontend configuration.
+
+### Account deletion
+
+Apply `supabase/migrations/20261024000200_soft_delete_accounts.sql` after the shared backend migrations and this repo's automatic-weekly-reviews migration **before deploying this client**. It adds `planner_accounts."isDeleted"` (default `false`) and `deleted_at`. Deletion is authenticated, immediate, idempotent and never queued offline. It disables weekly AI and blocks planner RPCs/direct planner-data reads across web and Mac clients. Auth identity and cloud data remain until manual removal; signing in again does not reactivate the account. Other devices may retain offline caches.
+
+After at least 30 days, list accounts ready for manual removal in the Supabase SQL editor:
+
+```sql
+select user_id, deleted_at
+from public.planner_accounts
+where "isDeleted" and deleted_at <= now() - interval '30 days'
+order by deleted_at;
+```
+
+Review this list and permanently delete the corresponding **Auth users** via Supabase's administrative tools; deleting only `planner_accounts` does not remove all user data and may allow reprovisioning. No purge scheduler or automatic hard deletion is installed. Keep this migration in the shared backend's deployment history too so subsequent Mac/backend deployments preserve the guard.
 
 ### Email-code authentication
 
@@ -140,7 +155,7 @@ After deployment, run `npm run check:production` with the matching public config
 
 Apply `supabase/migrations/20261024000100_automatic_weekly_reviews.sql` after the shared backend migrations before deploying this client. It enables reviews for newly provisioned planner accounts and preserves all existing account preferences (including disabled reviews). It affects all clients using this shared backend. Legacy backend `consent_*` fields remain protocol compatibility gates, not evidence of affirmative consent. Do not automatically enable existing disabled accounts from the browser. Users can turn reviews off or back on in Profile.
 
-Vercel Web Analytics is enabled for production builds on `www.prune.win` and `prune.win` using `@vercel/analytics`; enable Web Analytics in the Vercel project and redeploy. Local development, preview deployments on other hosts and local tests do not send analytics. Page-view URLs have query strings and fragments stripped (including authentication parameters); no custom planner/task events are sent. Google Ads, GoatCounter and Speed Insights remain disabled. CSP preserves application integrity pinning with the narrow managed analytics exception described above. Account export/deletion remain manual support requests, as in the Mac app; no new automated deletion/export feature is claimed.
+Vercel Web Analytics is enabled for production builds on `www.prune.win` and `prune.win` using `@vercel/analytics`; enable Web Analytics in the Vercel project and redeploy. Local development, preview deployments on other hosts and local tests do not send analytics. Page-view URLs have query strings and fragments stripped (including authentication parameters); no custom planner/task events are sent. Google Ads, GoatCounter and Speed Insights remain disabled. CSP preserves application integrity pinning with the narrow managed analytics exception described above. Account export remains a manual support request. Profile → Delete account marks the shared account as deleted and disables planner access and weekly AI; permanent removal is an operator task after 30 days, not an automatic job.
 
 ## Tests
 

@@ -191,7 +191,7 @@ class PlanningApplication {
     this.content.replaceChildren();
     this.content.setAttribute("aria-label", { today: "Today", tomorrow: "Tomorrow", focus: "Focus", habits: "Overview", profile: "Profile" }[this.view]);
     if (this.view === "profile") {
-      const profile = profilePage(this.email, this.data, () => this.signOut(), Math.floor((Date.now() + this.clockOffset) / 1000));
+      const profile = profilePage(this.email, this.data, () => this.signOut(), Math.floor((Date.now() + this.clockOffset) / 1000), () => this.deleteAccount());
       profile.insertBefore(this.weeklyReview.settingsElement, profile.querySelector(".profile-footer"));
       this.content.append(profile);
       void this.weeklyReview.refresh();
@@ -223,6 +223,26 @@ class PlanningApplication {
     this.navigation.style.setProperty("--selection-left", `${selected.offsetLeft}px`);
     this.navigation.style.setProperty("--selection-width", `${selected.offsetWidth}px`);
     this.navigation.style.setProperty("--selection-height", `${selected.offsetHeight}px`);
+  }
+
+  private async deleteAccount(): Promise<void> {
+    if (this.busy) return;
+    if (!window.confirm("Delete your account? You will lose access immediately. Your account and data will be marked for deletion and kept for 30 days before manual removal. Unsynced changes will not be uploaded. This cannot be undone in the app.")) return;
+    this.busy = true;
+    this.error = "";
+    this.alert.textContent = "";
+    this.root.querySelectorAll<HTMLButtonElement>("button").forEach((button) => { button.disabled = true; });
+    const button = this.content.querySelector<HTMLButtonElement>(".delete-account-button");
+    if (button) button.textContent = "Deleting account…";
+    try {
+      await this.client.deleteAccount();
+      window.location.reload();
+    } catch (error) {
+      this.busy = false;
+      this.error = this.message(error);
+      this.render();
+      this.alert.scrollIntoView({ block: "nearest" });
+    }
   }
 
   private async signOut(): Promise<void> {

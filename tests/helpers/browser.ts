@@ -32,6 +32,7 @@ export interface Backend {
   stops: string[];
   offline: boolean;
   rejectWrites: boolean;
+  isDeleted: boolean;
   loseNextAcknowledgement: boolean;
   malformedAcknowledgement: boolean;
   failSignIn: boolean;
@@ -44,7 +45,7 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
   signedIn: [false, { option: true }],
   expired: [false, { option: true }],
   backend: async ({ context, signedIn, expired }, use) => {
-    const state: Backend = { data: dashboard(), weekly: overview(), requests: [], stops: [], offline: false, rejectWrites: false, loseNextAcknowledgement: false, malformedAcknowledgement: false, failSignIn: false, previewStatus: 200, protocolVersion: 1, receipts: new Map() };
+    const state: Backend = { data: dashboard(), weekly: overview(), requests: [], stops: [], offline: false, rejectWrites: false, isDeleted: false, loseNextAcknowledgement: false, malformedAcknowledgement: false, failSignIn: false, previewStatus: 200, protocolVersion: 1, receipts: new Map() };
     // Seed once per browser context, not on reload/sign-out or each new tab.
     await context.addInitScript(({ signedIn, initialSession, authKey, privacyKey, version }) => {
       if (localStorage.getItem("prune:test:seeded")) return;
@@ -83,6 +84,13 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
       if (state.offline) { await route.abort("internetdisconnected"); return; }
       const action = body.p_action;
       const args = body.p_args ?? {};
+      if (action === "account_status") { await send({ isDeleted: state.isDeleted }); return; }
+      if (action === "delete_account") {
+        state.isDeleted = true;
+        state.weekly.settings.enabled = false;
+        await send({ isDeleted: true }); return;
+      }
+      if (state.isDeleted) { await send({ code: "PT403", message: "This account has been marked for deletion." }, 403); return; }
       if (action === "queue_protocol") { await send({ version: state.protocolVersion }); return; }
       if (action === "dashboard") { await send({ ...state.data, serverNow: Math.floor(Date.now() / 1000) }); return; }
       if (action === "weekly_overview") { await send(state.weekly); return; }
