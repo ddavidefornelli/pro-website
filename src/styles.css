@@ -142,7 +142,10 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .profile-email { max-width: 100%; margin: 0; text-align: left; }
 .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .profile-stat { padding: 16px; }
-.profile-footer .danger-button { width: 100%; }
+.profile-footer { align-items: center; gap: 16px; }
+.profile-footer .danger-button { width: auto; }
+.profile-footer .delete-account-button { margin-right: auto; padding: 4px 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 12px; }
+.profile-footer .delete-account-button:hover:not(:disabled) { background: transparent; border-color: transparent; color: inherit; }
 .review-stats { gap: 6px; }
 .review-stats > div { padding: 12px 8px; }
 .review-stats dt { font-size: 11px; }

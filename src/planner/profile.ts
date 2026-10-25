@@ -71,8 +71,8 @@ export function profilePage(
   const button = actionButton("Sign out", signOut);
   button.className = "danger-button";
   const deleteButton = actionButton("Delete account", deleteAccount);
-  deleteButton.className = "danger-button delete-account-button";
-  footer.append(button, node("p", "Deleting your account disables access immediately. Your data will be kept for 30 days before manual removal.", "muted"), deleteButton);
+  deleteButton.className = "delete-account-button";
+  footer.append(deleteButton, button);
   section.append(footer);
   return section;
 }
