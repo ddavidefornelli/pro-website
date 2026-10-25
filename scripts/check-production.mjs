@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { loadEnv } from "vite";
 import { publicConfig } from "../src/planner/config.ts";
-import { integrity, securityHeaders } from "./security-policy.ts";
+import { ANALYTICS_SCRIPTS, integrity, securityHeaders } from "./security-policy.ts";
 import { hasMarketingTracker } from "./tracking-policy.ts";
 
 const TABLES = ["planner_accounts", "planner_tasks", "planner_resources", "planner_stops", "planner_reviews", "planner_receipts", "ai_controls", "ai_usage", "ai_review_requests", "ai_review_previews"];
@@ -189,13 +189,13 @@ export async function runProductionChecks({ site = "https://www.prune.win", conf
     if (!/^text\/html(?:;|$)/i.test(type)) { add("FAIL", `site${path}:html`, `${path}: HTML content type`, "Expected text/html.", deploymentFix); return; }
     const html = response.text.replace(/<!--[\s\S]*?-->/g, "");
     const trackerFound = hasMarketingTracker(html);
-    check(!trackerFound, `site${path}:trackers`, `${path}: no recognized marketing tracker integration`, trackerFound ? "Tracking script/endpoint detected in hosted HTML (not merely a tracker name in prose)." : "Checked known Google Ads/Analytics, GoatCounter, Meta, Hotjar, Clarity and Vercel endpoints.", "Deploy the tracker-free app; disable host-injected Web Analytics/Speed Insights. This static scan is not a full browser network audit.");
+    check(!trackerFound, `site${path}:trackers`, `${path}: no recognized marketing tracker integration`, trackerFound ? "Tracking script/endpoint detected in hosted HTML (not merely a tracker name in prose)." : "Checked known Google Ads/Analytics, GoatCounter, Meta, Hotjar, Clarity and Vercel endpoints.", "Deploy the tracker-free app; disable unreviewed host-injected scripts (Speed Insights remains disabled). This static scan is not a full browser network audit.");
     const csp = response.headers.get("content-security-policy");
     let policy = null;
     if (!csp) add("FAIL", `site${path}:csp`, `${path}: enforced HTTP CSP`, "Content-Security-Policy header is missing; meta-only or report-only CSP is not a substitute.", deploymentFix);
     else {
       policy = parsePolicy(csp);
-      const hashes = [...(policy.get("script-src") || [])];
+      const hashes = [...(policy.get("script-src") || [])].filter((source) => !ANALYTICS_SCRIPTS.includes(source));
       const pinned = hashes.length > 0 && hashes.every((hash) => /^'sha384-[A-Za-z0-9+/]{64}'$/.test(hash));
       const backend = config?.url || (() => {
         try { return new URL([...(policy.get("connect-src") || [])][0]).origin; } catch { return null; }
@@ -234,7 +234,7 @@ export async function runProductionChecks({ site = "https://www.prune.win", conf
       if (!await inspectAsset(url, attrs.integrity, "JavaScript")) valid = false;
     }
     check(valid, `site${path}:scripts`, `${path}: same-origin, external, integrity-pinned entry scripts`, valid ? "All entry script tags carry SHA-384 integrity." : "Missing scripts/SRI, inline code, or an unexpected script source was found.", deploymentFix);
-    if (policy && valid) check(policy.get("script-src")?.size === documentHashes.size && [...documentHashes].every((hash) => policy.get("script-src").has(hash)), `site${path}:script-policy`, `${path}: CSP hashes match the actual entry scripts`, "The header must authorize exactly the script hashes in this document.", deploymentFix);
+    if (policy && valid) check(policy.get("script-src")?.size === documentHashes.size + ANALYTICS_SCRIPTS.length && [...documentHashes].every((hash) => policy.get("script-src").has(hash)), `site${path}:script-policy`, `${path}: CSP hashes match the actual entry scripts`, "The header must authorize the document hashes plus the reviewed Vercel Analytics script paths.", deploymentFix);
 
     const styles = [...html.matchAll(/<link\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi)].map((match) => attributes(match[1])).filter((attrs) => attrs.rel?.toLowerCase().split(/\s+/).includes("stylesheet"));
     let validStyles = true;

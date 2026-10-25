@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { API_PATHS, hardenHtml, integrity, securityHeaders } from "../scripts/security-policy.ts";
+import { ANALYTICS_SCRIPTS, ANALYTICS_CONNECTIONS, API_PATHS, hardenHtml, integrity, securityHeaders } from "../scripts/security-policy.ts";
 import { productionCsp } from "../scripts/csp-plugin.ts";
 import { buildVercel } from "../scripts/build-vercel.ts";
 
@@ -18,15 +18,15 @@ const directives = (policy) => Object.fromEntries(policy.split(";").map((part) =
   return [name, sources.join(" ")];
 }));
 
-test("CSP and SRI use hashes of exact emitted bytes, with no script host fallback", () => {
+test("CSP and SRI use hashes of exact emitted bytes, with only a narrow managed analytics exception", () => {
   const built = hardenHtml(entry, assets, origin);
   const expected = `sha384-${createHash("sha384").update(script).digest("base64")}`;
   const csp = directives(built.headers["Content-Security-Policy"]);
-  assert.equal(csp["script-src"], `'${expected}'`);
+  assert.equal(csp["script-src"], `'${expected}' ${ANALYTICS_SCRIPTS.join(" ")}`);
   assert.ok(built.html.includes(`<script integrity="${expected}"`));
   assert.ok(built.html.includes(`<link integrity="${integrity(css)}"`));
   assert.ok(built.html.indexOf("http-equiv=") < built.html.indexOf("<script"));
-  assert.equal(csp["connect-src"], API_PATHS.map((path) => `${origin}${path}`).join(" "));
+  assert.equal(csp["connect-src"], [...API_PATHS.map((path) => `${origin}${path}`), ...ANALYTICS_CONNECTIONS].join(" "));
   assert.ok(!built.headers["Content-Security-Policy"].includes("*"));
   assert.ok(!built.headers["Content-Security-Policy"].includes("unsafe-"));
   assert.equal(csp["style-src"], "'self'");
@@ -100,7 +100,7 @@ test("packaging revalidates complete HTML, styles, SRI and a single matching met
 
 test("final HTML and bundle bytes fail closed on known tracking integrations", () => {
   assert.throws(() => hardenHtml(entry.replace('</body>', '<script src="https://gc.zgo.at/count.js"></script></body>'), assets, origin), /tracker/);
-  for (const tracker of ['gtag("config", "fixture");', 'window.dataLayer = [];', 'fetch("/_vercel/insights/view");']) {
+  for (const tracker of ['gtag("config", "fixture");', 'window.dataLayer = [];', 'fetch("/_vercel/speed-insights/view");']) {
     assert.throws(() => hardenHtml(entry, new Map([...assets, ["assets/app.js", tracker]]), origin), /tracker/);
   }
   assert.ok(hardenHtml(entry.replace('</body>', 'Google Ads and GoatCounter are not loaded.</body>'), assets, origin));

@@ -8,6 +8,11 @@ export const API_PATHS = [
   "/rest/v1/rpc/planner_call", "/functions/v1/weekly-review",
 ] as const;
 
+// Narrow exception for Vercel's managed (non-SRI-pinned) analytics script.
+export const ANALYTICS_ORIGINS = ["https://www.prune.win", "https://prune.win"];
+export const ANALYTICS_SCRIPTS = ANALYTICS_ORIGINS.map((origin) => `${origin}/_vercel/insights/script.js`);
+export const ANALYTICS_CONNECTIONS = ANALYTICS_ORIGINS.map((origin) => `${origin}/_vercel/insights/`);
+
 export function integrity(content: string | Uint8Array): string {
   return `sha384-${createHash("sha384").update(content).digest("base64")}`;
 }
@@ -22,13 +27,12 @@ export function securityHeaders(apiOrigin: string, scriptHashes: string[]): Reco
   }
   const policy = [
     "default-src 'none'",
-    // No 'self', host allowlist or strict-dynamic delegation. Only these exact
-    // scripts can execute, and external scripts must carry matching SRI.
-    `script-src ${[...new Set(scriptHashes)].map((hash) => `'${hash}'`).join(" ")}`,
+    // App scripts remain hash-pinned; only the managed analytics path is exempt.
+    `script-src ${[...new Set(scriptHashes)].map((hash) => `'${hash}'`).join(" ")} ${ANALYTICS_SCRIPTS.join(" ")}`,
     "script-src-attr 'none'",
     "style-src 'self'",
     "style-src-attr 'none'",
-    `connect-src ${API_PATHS.map((path) => `${apiOrigin}${path}`).join(" ")}`,
+    `connect-src ${[...API_PATHS.map((path) => `${apiOrigin}${path}`), ...ANALYTICS_CONNECTIONS].join(" ")}`,
     "img-src 'self'",
     "font-src 'self'",
     "manifest-src 'none'",

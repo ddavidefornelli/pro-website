@@ -5,8 +5,9 @@ const integrations = [
   /(?:https?:)?\/\/(?:[\w-]+\.)*(?:googletagmanager\.com|google-analytics\.com|googleadservices\.com|doubleclick\.net|goatcounter\.com|gc\.zgo\.at|connect\.facebook\.net|static\.hotjar\.com|clarity\.ms)(?:[/:"'`\s]|$)/i,
   /\b(?:gtag|fbq)\s*\(/,
   /\b(?:window|globalThis)\.(?:dataLayer|goatcounter)\b/,
-  /\/_vercel\/(?:insights|speed-insights)(?:\/|["'`?\s]|$)/,
-  /["']@vercel\/(?:analytics|speed-insights)(?:\/[^"']*)?["']/,
+  // Vercel Web Analytics is explicitly enabled; Speed Insights remains disabled.
+  /\/_vercel\/speed-insights(?:\/|["'`?\s]|$)/,
+  /["']@vercel\/speed-insights(?:\/[^"']*)?["']/,
 ];
 
 export function hasMarketingTracker(content: string): boolean {

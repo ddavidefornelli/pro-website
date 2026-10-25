@@ -22,6 +22,6 @@ test("package dependencies do not install advertising or behavioural analytics S
   const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   const dependencies = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
   for (const name of Object.keys(dependencies)) {
-    assert.ok(!/^(?:@vercel\/(?:analytics|speed-insights)|@google-analytics\/|@segment\/|@hotjar\/|@microsoft\/clarity|posthog-js$|mixpanel-browser$|react-ga(?:4)?$|react-gtm-module$)/.test(name), `Tracking SDK found: ${name}`);
+    assert.ok(!/^(?:@vercel\/speed-insights|@google-analytics\/|@segment\/|@hotjar\/|@microsoft\/clarity|posthog-js$|mixpanel-browser$|react-ga(?:4)?$|react-gtm-module$)/.test(name), `Tracking SDK found: ${name}`);
   }
 });
