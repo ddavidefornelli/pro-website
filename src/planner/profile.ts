@@ -1,5 +1,4 @@
 import type { Dashboard } from "./api";
-import { ActivityCalendar } from "./activity-calendar";
 import { profileStats } from "./profile-stats";
 
 import { actionButton, decorativeSvg, element as node, svgElement } from "./dom";
@@ -32,6 +31,7 @@ export function profilePage(
   signOut: () => Promise<void>,
   now: number,
   deleteAccount: () => Promise<void>,
+  activityCalendar: HTMLElement,
 ): HTMLElement {
   const section = node("section", undefined, "profile-page");
   section.setAttribute("aria-labelledby", "profile-heading");
@@ -60,9 +60,7 @@ export function profilePage(
       ]),
       node("p", `Today’s plan: ${data.todayTasks.filter((task) => task.status === "completed").length}/${data.todayTasks.length} complete · ${focusDuration(stats.todayEstimatedMinutes * 60)} estimated`, "muted"),
     );
-    const calendar = new ActivityCalendar();
-    calendar.update(data.today, data.completions);
-    section.append(calendar.element);
+    section.append(activityCalendar);
   } else {
     section.append(node("p", "Stats unavailable.", "muted"));
   }

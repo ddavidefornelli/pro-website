@@ -1,7 +1,7 @@
 import { PlanningClient, type Dashboard, type Task } from "./api";
 import { estimateDial } from "./estimate-dial";
-import { rainDiamonds } from "./diamonds";
-import { ActivityCalendar } from "./activity-calendar";
+import { celebrateWithCrown } from "./crown";
+import { createActivityCalendar } from "./activity-calendar-mount";
 import { WeeklyReviewPanel } from "./weekly-review";
 import { authenticate } from "./auth";
 import { profileIcon, profilePage } from "./profile";
@@ -9,7 +9,6 @@ import { actionButton, decorativeSvg, element, svgElement } from "./dom";
 import { errorMessage } from "./errors";
 import { isDayComplete, PLANNER_LIMITS, trackedSeconds } from "./planner";
 import { formatDuration } from "./time";
-import { focusDuration } from "../shared/task-timing";
 
 type View = "today" | "focus" | "tomorrow" | "habits" | "profile";
 
@@ -45,7 +44,7 @@ class PlanningApplication {
   private readonly syncBar = element("div", undefined, "sync-bar");
   private readonly syncLabel = element("span");
   private readonly weeklyReview: WeeklyReviewPanel;
-  private readonly activityCalendar = new ActivityCalendar();
+  private readonly activityCalendar = createActivityCalendar();
 
   constructor(
     private readonly root: HTMLElement,
@@ -191,7 +190,8 @@ class PlanningApplication {
     this.content.replaceChildren();
     this.content.setAttribute("aria-label", { today: "Today", tomorrow: "Tomorrow", focus: "Focus", habits: "Overview", profile: "Profile" }[this.view]);
     if (this.view === "profile") {
-      const profile = profilePage(this.email, this.data, () => this.signOut(), Math.floor((Date.now() + this.clockOffset) / 1000), () => this.deleteAccount());
+      if (this.data) this.activityCalendar.update(this.data.today, this.data.completions);
+      const profile = profilePage(this.email, this.data, () => this.signOut(), Math.floor((Date.now() + this.clockOffset) / 1000), () => this.deleteAccount(), this.activityCalendar.element);
       profile.insertBefore(this.weeklyReview.settingsElement, profile.querySelector(".profile-footer"));
       this.content.append(profile);
       void this.weeklyReview.refresh();
@@ -213,7 +213,7 @@ class PlanningApplication {
   }
 
   private celebrate(): void {
-    rainDiamonds();
+    celebrateWithCrown();
   }
 
   private updateNavigationIndicator(): void {
@@ -302,7 +302,9 @@ class PlanningApplication {
         details.append(
           element(
             "p",
-            `${task.estimatedMinutes} min estimated · ${task.status}${task.status === "completed" ? ` · ${task.actualSeconds > 0 ? `${focusDuration(task.actualSeconds)} actual focus time` : "No focus time recorded"}` : ""}`,
+            task.status === "completed"
+              ? formatDuration(task.actualSeconds)
+              : `${task.estimatedMinutes} min estimated · ${task.status}`,
             "muted",
           ),
         );

@@ -1,25 +1,25 @@
 import { onMount } from "solid-js";
-import Download from "./Download";
 import { startPlanner } from "./planner/main";
-import { rainDiamonds } from "./planner/diamonds";
+import { celebrateWithCrown } from "./planner/crown";
 
 export default function App() {
-  if (/^\/download\/?$/.test(window.location.pathname)) return <Download />;
   let planner!: HTMLDivElement;
   onMount(() => {
     if (import.meta.env.DEV) {
       const url = new URL(window.location.href);
-      if (url.searchParams.get("preview") === "diamonds") {
+      if (["crown", "diamonds"].includes(url.searchParams.get("preview") ?? "")) {
         url.searchParams.delete("preview");
         window.history.replaceState(window.history.state, "", url);
-        window.setTimeout(rainDiamonds, 800);
+        window.setTimeout(celebrateWithCrown, 800);
       }
     }
+
     void startPlanner(planner, planner).catch(() => {
       const message = document.createElement("p");
       message.className = "error";
       message.setAttribute("role", "alert");
-      message.textContent = "prune could not start. Reload to try again. Do not clear browser storage if you have unsynced changes.";
+      message.textContent =
+        "prune could not start. Reload to try again. Do not clear browser storage if you have unsynced changes.";
       planner.replaceChildren(message);
     });
   });

@@ -6,11 +6,22 @@ import { acknowledgePrivacy, hasPrivacyAcknowledgement } from "./privacy-state";
 import { privacyPolicyButton } from "./privacy";
 
 /** Email-code sign-in with device-local privacy acknowledgement. */
-export async function authenticate(root: HTMLElement, client: PlanningClient): Promise<AuthStatus> {
+export async function authenticate(
+  root: HTMLElement,
+  client: PlanningClient,
+): Promise<AuthStatus> {
   let acknowledged = false;
-  try { acknowledged = hasPrivacyAcknowledgement(localStorage); } catch { /* Show a recoverable storage error on submit. */ }
+  try {
+    acknowledged = hasPrivacyAcknowledgement(localStorage);
+  } catch {
+    /* Show a recoverable storage error on submit. */
+  }
   let configurationError = "";
-  try { webConfig(); } catch (error) { configurationError = errorMessage(error); }
+  try {
+    webConfig();
+  } catch (error) {
+    configurationError = errorMessage(error);
+  }
   let initialError = "";
   if (acknowledged && !configurationError) {
     const loading = element("div", undefined, "startup-loading");
@@ -22,19 +33,34 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     root.replaceChildren(loading);
     try {
       const status = await client.authStatus();
-      if (status.email) { root.replaceChildren(); return status; }
-    } catch (error) { initialError = errorMessage(error, "Could not restore your session. Sign in again when you are online. Your pending planner changes remain on this device."); }
+      if (status.email) {
+        root.replaceChildren();
+        return status;
+      }
+    } catch (error) {
+      initialError = errorMessage(
+        error,
+        "Could not restore your session. Sign in again when you are online. Your pending planner changes remain on this device.",
+      );
+    }
   }
 
   return new Promise((resolve) => {
     const section = element("section", undefined, "auth-panel");
     section.setAttribute("aria-labelledby", "signup-title");
-    const heading = element("h1", "Just Fucking Win.");
+    const heading = element("h1", "DO LESS.");
+    heading.append(element("br"), "ACHIEVE MORE.");
     heading.id = "signup-title";
-    const description = element("p", "Plan three tasks, execute and win today.", "auth-description");
+    const description = element(
+      "p",
+      `Focus on just 3 tasks and understand what's holding you back with the free weekly analysis`,
+      "auth-description",
+    );
     const form = element("form", undefined, "signup-form");
-    const emailLabel = element("label", "Email address");
+    const emailLabel = element("label");
+    emailLabel.append(element("span", "Email address", "email-label-spacer"));
     const email = element("input");
+    email.setAttribute("aria-label", "Email address");
     email.name = "email";
     email.type = "email";
     email.autocomplete = "email";
@@ -73,7 +99,8 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       if (code.value !== sanitized) code.value = sanitized;
       updateCodeBoxes();
     });
-    for (const event of ["focus", "click", "keyup", "select"]) code.addEventListener(event, updateCodeBoxes);
+    for (const event of ["focus", "click", "keyup", "select"])
+      code.addEventListener(event, updateCodeBoxes);
     codeBoxes.append(code, ...digits);
     codeLabel.append(codeBoxes);
     codeLabel.hidden = true;
@@ -91,7 +118,7 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       heading.hidden = false;
       description.hidden = false;
       changeEmail.hidden = true;
-      submit.textContent = "Send code";
+      submit.textContent = "I want to win";
       alert.textContent = "";
       email.focus();
     });
@@ -102,10 +129,14 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
     checkbox.name = "privacy";
     checkbox.required = !acknowledged;
     const privacyText = element("span");
-    privacyText.append("I accept the ", privacyPolicyButton("Terms & Privacy"), ".");
+    privacyText.append(
+      "I accept the ",
+      privacyPolicyButton("Terms & Privacy"),
+      ".",
+    );
     privacy.append(checkbox, privacyText);
     privacy.hidden = acknowledged;
-    const submit = element("button", "Send code", "auth-submit");
+    const submit = element("button", "I WANT TO WIN", "auth-submit");
     submit.type = "submit";
     const alert = element("p", configurationError || initialError, "error");
     alert.setAttribute("role", "alert");
@@ -128,8 +159,13 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
       alert.textContent = "";
       try {
         if (!acknowledged) {
-          try { acknowledgePrivacy(localStorage); }
-          catch { throw new Error("Could not save your terms acceptance. Allow browser storage and try again. No sign-in request was sent."); }
+          try {
+            acknowledgePrivacy(localStorage);
+          } catch {
+            throw new Error(
+              "Could not save your terms acceptance. Allow browser storage and try again. No sign-in request was sent.",
+            );
+          }
           acknowledged = true;
           privacy.hidden = true;
           checkbox.required = false;
@@ -148,12 +184,16 @@ export async function authenticate(root: HTMLElement, client: PlanningClient): P
           return;
         }
         const account = await client.verifyCode(sentTo, code.value.trim());
-        if (!account.email) throw new Error("Sign-in did not return an account. Please try again.");
+        if (!account.email)
+          throw new Error(
+            "Sign-in did not return an account. Please try again.",
+          );
         code.value = "";
         root.replaceChildren();
         resolve(account);
-      } catch (error) { alert.textContent = errorMessage(error); }
-      finally {
+      } catch (error) {
+        alert.textContent = errorMessage(error);
+      } finally {
         setBusy(false);
         if (sentTo && code.isConnected) code.focus();
       }
