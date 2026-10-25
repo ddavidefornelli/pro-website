@@ -13,6 +13,7 @@ export interface Task {
   serverRevision?: number;
   id: string;
   outcome: string;
+  /** Legacy shared-backend field; tasks have equal importance in the web UI. */
   isPriority: boolean;
   plannedFor: string;
   estimatedMinutes: number;
@@ -256,10 +257,6 @@ export class PlanningClient {
 
   removeResource(id: string, resourceId: string): Promise<Task> {
     return this.call("remove_task_resource", { id, resourceId });
-  }
-
-  prioritize(id: string): Promise<Task> {
-    return this.call("prioritize_task", { id });
   }
 
   start(id: string): Promise<Task> {

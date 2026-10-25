@@ -40,7 +40,7 @@ test("normal planner, calendar and profile workflows do not violate CSP", async 
   await openPlanner(page);
   await addTask(page, "Hash-locked planner workflow");
   await synced(page);
-  await page.locator(".task.is-priority").getByRole("button", { name: "Start focus", exact: true }).click();
+  await page.locator(".task").first().getByRole("button", { name: "Start focus", exact: true }).click();
   await page.getByRole("button", { name: "Complete task", exact: true }).click();
   await synced(page);
   await page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true }).click();
@@ -286,7 +286,7 @@ test("focus scratchpad stays in memory and planner credentials stay out of the o
   await openPlanner(page);
   await addTask(page, "Keep notes local");
   await synced(page);
-  await page.locator(".task.is-priority").getByRole("button", { name: "Start focus", exact: true }).click();
+  await page.locator(".task").first().getByRole("button", { name: "Start focus", exact: true }).click();
   await page.getByRole("textbox", { name: "Notes", exact: true }).fill("Highly private scratchpad marker");
   await page.getByRole("button", { name: "Complete task", exact: true }).click();
   await synced(page);

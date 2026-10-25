@@ -25,7 +25,7 @@ test.describe("mobile planner", () => {
     for (const title of ["Write the first draft", "Ship the small update", "Make time to read"]) { await addTask(page, title); await synced(page); }
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: `test-results/${info.project.name}-mobile-today.png`, fullPage: true });
-    await page.locator(".task.is-priority").getByRole("button", { name: "Start focus", exact: true }).tap();
+    await page.locator(".task").first().getByRole("button", { name: "Start focus", exact: true }).tap();
     await expect(page.locator("#focus-timer")).toBeEnabled();
     await page.waitForTimeout(400); // Settle the navigation indicator's 360ms transition.
     await page.screenshot({ path: `test-results/${info.project.name}-mobile-focus.png`, fullPage: true });

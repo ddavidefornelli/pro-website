@@ -1,6 +1,5 @@
 import { PlanningClient, type Dashboard, type Task } from "./api";
 import { estimateDial } from "./estimate-dial";
-import { celebrateWithCrown } from "./crown";
 import { createActivityCalendar } from "./activity-calendar-mount";
 import { WeeklyReviewPanel } from "./weekly-review";
 import { authenticate } from "./auth";
@@ -28,7 +27,6 @@ class PlanningApplication {
   // Scratchpad only: never included in storage, API calls, or the offline queue.
   private focusNotes = "";
   private focusNotesTaskId: string | null = null;
-  private completionState: { day: string; complete: boolean } | null = null;
 
   private get todayComplete(): boolean {
     return isDayComplete(this.data?.todayTasks ?? []);
@@ -205,15 +203,6 @@ class PlanningApplication {
     else if (this.view === "habits") this.renderHabits();
     else this.renderPlan();
     this.tick();
-    const complete = this.todayComplete;
-    if (complete && this.completionState?.day === this.data.today && !this.completionState.complete) {
-      this.celebrate();
-    }
-    this.completionState = { day: this.data.today, complete };
-  }
-
-  private celebrate(): void {
-    celebrateWithCrown();
   }
 
   private updateNavigationIndicator(): void {
@@ -278,24 +267,8 @@ class PlanningApplication {
     heading.append(dayLabel);
     this.content.append(heading);
     const list = element("ul", undefined, "task-list");
-    const priorityCompleted = tasks.some((task) => task.isPriority && task.status === "completed");
-    const canChoosePriority = tasks.every((task) => task.status === "planned");
     for (const task of tasks) {
-      const item = element("li", undefined, `task${task.isPriority ? " is-priority" : ""}${!tomorrow && task.status === "completed" ? " is-completed" : ""}`);
-      const crown = this.button("", () => this.mutate(() => this.client.prioritize(task.id)));
-      const crownIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      crownIcon.setAttribute("viewBox", "0 0 24 24");
-      crownIcon.setAttribute("aria-hidden", "true");
-      const crownPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      crownPath.setAttribute("d", "M3 6 7 10 12 3 17 10 21 6 19 18H5L3 6ZM5 21H19");
-      crownIcon.append(crownPath);
-      crown.append(crownIcon);
-      crown.className = "task-crown";
-      crown.setAttribute("aria-label", task.isPriority ? "Most important task" : "Make most important task");
-      crown.setAttribute("aria-pressed", String(task.isPriority));
-      crown.title = task.isPriority ? "Most important task — complete this first" : "Make most important task";
-      crown.disabled = this.busy || !canChoosePriority;
-      item.append(crown);
+      const item = element("li", undefined, `task${!tomorrow && task.status === "completed" ? " is-completed" : ""}`);
       const details = element("div", undefined, "task-details");
       details.append(this.renderTaskTitle(task, "h2"));
       if (task.status === "completed" || (tomorrow && task.status !== "planned")) {
@@ -326,8 +299,7 @@ class PlanningApplication {
             this.view = "focus";
           }),
         );
-        start.disabled = this.busy || data.activeTask !== null || (!task.isPriority && !priorityCompleted);
-        if (!task.isPriority && !priorityCompleted) start.title = "Complete the crowned task first";
+        start.disabled = this.busy || data.activeTask !== null;
         item.append(start);
       }
       if (task.status === "active")

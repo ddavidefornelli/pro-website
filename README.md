@@ -28,7 +28,7 @@ After acknowledging the notice, enter your email, then enter the one-time code s
 
 ## Features
 
-- Today and Tomorrow: up to three tasks per day; titles, estimates, and most-important-task selection. Tomorrow is available immediately. Desktop resource metadata is preserved, but the current web UI does not display or edit resources.
+- Today and Tomorrow: up to three equal tasks per day with editable titles and estimates; start any task in any order. No main-task designation, crowns, or completion animation. Tomorrow is available immediately. Desktop resource metadata is preserved, but the current web UI does not display or edit resources.
 - Focus: one active task, timestamp-based timer, pause/resume, written stop reasons, completion, and an in-memory-only notes scratchpad. Pause before switching views, just like the Mac app.
 - Overview: completion calendar, automatic scheduled weekly AI reviews, saved report history, and current-week previews. Previews are session-only and retain the server's cooldowns/quotas.
 - Profile: all-time/recent stats, streaks, AI preferences, sign-out and confirmed account deletion (soft-delete flag, followed by manual removal after 30 days).
@@ -45,6 +45,8 @@ After acknowledging the notice, enter your email, then enter the one-time code s
 - HTTPS and a current browser with Web Locks support are required (localhost is allowed for development). Unencrypted site storage is shared by tabs on this origin but isolated by Supabase project and immutable user ID.
 
 ## Connect the existing backend
+
+Apply `supabase/migrations/20261025000100_equal_tasks.sql` after the previous shared and website migrations before deploying this client. It removes the server's most-important-task-first restriction while preserving ownership, today's-task validation, the single-active-task rule, and queue safeguards. This affects all clients on the shared backend. Legacy priority fields/actions remain compatible with existing Mac clients and saved outbox commands; the web UI no longer uses them.
 
 Do **not** reset the Mac app's database or create a parallel account store. Point both clients at the same project. The web transport calls the existing endpoints:
 

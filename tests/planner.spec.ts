@@ -51,14 +51,38 @@ test("task entry uses an inline desktop estimate and a cancellable mobile estima
   }
 });
 
-test("plans three tasks, chooses a priority, focuses, pauses with a reason and completes", async ({ page, backend }) => {
+test("equal tasks can start in any order without choosing a main task", async ({ page, backend }) => {
+  await openPlanner(page);
+  for (const title of ["First equal task", "Second equal task", "Third equal task"]) {
+    await addTask(page, title);
+    await synced(page);
+  }
+  await expect(page.locator(".task-crown, .task.is-priority")).toHaveCount(0);
+  for (const start of await page.getByRole("button", { name: "Start focus", exact: true }).all()) {
+    await expect(start).toBeEnabled();
+  }
+  await page.locator(".task").filter({ hasText: "Second equal task" })
+    .getByRole("button", { name: "Start focus", exact: true }).click();
+  await synced(page);
+  await expect(page.locator("#focus-timer")).toBeVisible();
+  expect(backend.data.activeTask?.outcome).toBe("Second equal task");
+  expect(backend.requests.some((request) => request.body.p_action === "prioritize_task")).toBe(false);
+  await page.getByRole("button", { name: "Complete task", exact: true }).click();
+  await synced(page);
+  await expect(page.getByRole("button", { name: "Start focus", exact: true })).toHaveCount(2);
+  await expect(page.locator(".crown-celebration")).toHaveCount(0);
+});
+
+test("plans three equal tasks, starts the second, pauses with a reason and completes", async ({ page, backend }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openPlanner(page);
   for (const title of ["Write the proposal", "Ship the update", "Read a chapter"]) { await addTask(page, title); await synced(page); }
   await expect(page.getByRole("button", { name: "Add task", exact: true })).toHaveCount(0);
   const second = page.locator(".task").filter({ hasText: "Ship the update" });
-  await second.getByRole("button", { name: "Make most important task" }).click();
-  await synced(page);
+  await expect(page.locator(".task-crown, .task.is-priority")).toHaveCount(0);
+  for (const start of await page.getByRole("button", { name: "Start focus", exact: true }).all()) {
+    await expect(start).toBeEnabled();
+  }
   await second.getByRole("button", { name: "Start focus", exact: true }).click();
   await expect(page.locator("#focus-timer")).toBeVisible();
   await expect(page.getByRole("navigation").getByRole("button", { name: "Today", exact: true })).toBeDisabled();
@@ -249,7 +273,7 @@ test("mobile task, focus, profile and overview layouts have no page-level horizo
     await page.getByRole("navigation").getByRole("button", { name: "Today", exact: true }).click();
   }
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.locator(".task.is-priority").getByRole("button", { name: "Start focus", exact: true }).click();
+  await page.locator(".task").first().getByRole("button", { name: "Start focus", exact: true }).click();
   await expect(page.locator("#focus-timer")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   await page.getByRole("button", { name: "Complete task", exact: true }).scrollIntoViewIfNeeded();
