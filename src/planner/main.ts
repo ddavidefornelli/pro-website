@@ -119,6 +119,9 @@ class PlanningApplication {
     const changed = signature !== this.dataSignature;
     this.dataSignature = signature;
     this.data = next;
+    // Include tasks planned on earlier days but completed today; cap the visual at full signal.
+    const completedToday = next.completions.find((completion) => completion.day === next.today)?.count ?? 0;
+    this.root.dataset.completionLevel = String(Math.max(0, Math.min(PLANNER_LIMITS.tasksPerDay, completedToday)));
     this.clockOffset = next.serverNow * 1000 - Date.now();
     return changed;
   }

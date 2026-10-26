@@ -12,17 +12,75 @@ body {
   min-width: 280px;
   isolation: isolate;
 }
-/* Keep the artwork behind content without affecting text or control opacity. */
-body::before {
-  content: "";
+/* A dense, fixed-resolution canvas stays registered to the artwork.
+   Completion unlocks clusters; slow independent charging stays in the background. */
+body::before,
+.cyber-artwork {
   position: fixed;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
+}
+body::before {
+  content: "";
   background: url("/prune-background.png") center / auto
     clamp(70svh, 50vw, 100svh) no-repeat;
   filter: grayscale(1);
   opacity: 0.05;
-  pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+body:has(#app[data-completion-level="1"]) {
+  --pixel-opacity: 0.32;
+  --pixel-presence: 0.48;
+  --pixel-bloom: 2px;
+  --logo-opacity: 0.025;
+}
+body:has(#app[data-completion-level="2"]) {
+  --pixel-opacity: 0.58;
+  --pixel-presence: 0.7;
+  --pixel-bloom: 4px;
+  --logo-opacity: 0.03;
+}
+body:has(#app[data-completion-level="3"]) {
+  --pixel-opacity: 0.94;
+  --pixel-presence: 0.9;
+  --pixel-bloom: 7px;
+  --logo-opacity: 0.035;
+}
+body:has(#app[data-completion-level]:not([data-completion-level="0"]))::before {
+  opacity: var(--logo-opacity);
+}
+.cyber-artwork {
+  visibility: hidden;
+  opacity: 0;
+  mask: url("/prune-background.png") center / auto
+    clamp(70svh, 50vw, 100svh) no-repeat;
+  mask-mode: luminance;
+  transition: opacity 0.8s ease, visibility 0.8s;
+}
+.pixel-grid {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: clamp(70svh, 50vw, 100svh);
+  width: auto;
+  aspect-ratio: 2;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated;
+  opacity: var(--pixel-presence, 0);
+  transition: opacity 1.8s ease;
+  filter: drop-shadow(0 0 var(--pixel-bloom, 0px) #ff123b);
+}
+body:has(#app[data-completion-level]:not([data-completion-level="0"])) .cyber-artwork {
+  visibility: visible;
+  opacity: var(--pixel-opacity);
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  .cyber-artwork,
+  .pixel-grid {
+    transition: none !important;
+  }
 }
 body:has(#app.single-screen) {
   overflow: visible;
