@@ -1,5 +1,6 @@
 import { onMount } from "solid-js";
 import { startPlanner } from "./planner/main";
+import PixelBackground from "./PixelBackground";
 
 export default function App() {
   let planner!: HTMLDivElement;
@@ -14,5 +15,10 @@ export default function App() {
     });
   });
 
-  return <div id="app" ref={planner} />;
+  return (
+    <>
+      <PixelBackground />
+      <div id="app" ref={planner} />
+    </>
+  );
 }
