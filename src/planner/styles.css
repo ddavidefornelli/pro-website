@@ -73,6 +73,27 @@ body { margin: 0; }
 .privacy-policy-content ul { padding-left: 22px; }
 .privacy-template-warning { flex: none; margin: 0; padding: 12px 20px; color: var(--taupe); background: #d4535b12; font-size: 12px; }
 @media (max-height: 650px) { .privacy-onboarding { margin-block: 0; } }
+.first-task-dialog { width: min(600px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; padding: clamp(20px, 4vw, 40px); color: var(--text); background: var(--background); border: 1px solid var(--border); box-shadow: 0 24px 100px #0009; }
+.first-task-dialog::backdrop { background: #000b; backdrop-filter: blur(8px); }
+.onboarding-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.onboarding-eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; }
+.onboarding-top button { flex: none; padding: 8px; border-color: transparent; background: transparent; font-size: 12px; color: var(--muted); }
+.onboarding-progress { display: flex; gap: 6px; margin: 20px 0 28px; }
+.onboarding-progress span { flex: 1; height: 3px; background: var(--border); }
+.onboarding-progress .is-done { background: var(--blood-red); }
+.first-task-dialog h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.2; }
+.first-task-dialog > .muted { margin-bottom: 28px; }
+.onboarding-form { display: grid; gap: 12px; }
+.onboarding-form label { font-size: 14px; }
+.onboarding-form input { width: 100%; min-width: 0; }
+.onboarding-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.onboarding-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+.onboarding-actions button { min-height: 44px; font-size: 14px; }
+.onboarding-primary { color: var(--background); background: var(--accent); }
+.onboarding-outcome { margin: 0; padding: 16px; border-left: 2px solid var(--blood-red); background: var(--surface); overflow-wrap: anywhere; }
+.onboarding-estimate { display: flex; align-items: center; gap: 20px; padding-block: 12px; }
+.onboarding-estimate .estimate-dial { width: 80px; height: 80px; }
+.onboarding-estimate .dial-readout { font-size: 24px; }
 .startup-loading { min-height: calc(100dvh - 100px); display: grid; place-items: center; }
 .startup-ring { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-right-color: var(--accent); border-radius: 50%; animation: startup-spin 900ms linear infinite; }
 @keyframes startup-spin { to { transform: rotate(360deg); } }

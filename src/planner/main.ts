@@ -8,6 +8,7 @@ import { actionButton, decorativeSvg, element, svgElement } from "./dom";
 import { errorMessage } from "./errors";
 import { isDayComplete, PLANNER_LIMITS, trackedSeconds } from "./planner";
 import { formatDuration } from "./time";
+import { openFirstTaskOnboarding } from "./onboarding";
 
 type View = "today" | "focus" | "tomorrow" | "habits" | "profile";
 
@@ -49,6 +50,7 @@ class PlanningApplication {
     private readonly client: PlanningClient,
     private readonly email: string,
     private readonly accountHost: HTMLElement,
+    private readonly accountKey: string,
   ) {
     this.weeklyReview = new WeeklyReviewPanel(client);
   }
@@ -87,6 +89,21 @@ class PlanningApplication {
     updateSyncStatus();
     new ResizeObserver(() => this.updateNavigationIndicator()).observe(this.navigation);
     await this.refresh(true);
+    if (this.data) {
+      let firstTask: Task | null = null;
+      openFirstTaskOnboarding(this.root, this.accountKey, this.data, async (outcome, minutes) => {
+        firstTask = await this.client.create(outcome, this.data!.today, minutes);
+        this.applyDashboard(await this.client.dashboard());
+        this.view = "today";
+        this.render();
+      }, async () => {
+        if (!firstTask) return;
+        await this.client.start(firstTask.id);
+        this.applyDashboard(await this.client.dashboard());
+        this.view = "focus";
+        this.render();
+      });
+    }
     const checkReview = async () => {
       await this.client.generateIfDue().catch(() => { /* Server quotas enforce retry backoff. */ });
       if (this.view === "habits" || this.view === "profile") await this.weeklyReview.refresh();
@@ -110,7 +127,7 @@ class PlanningApplication {
   }
 
   private get refreshDeferred(): boolean {
-    return this.busy || this.refreshing || this.pauseReasonOpen || !!this.content.querySelector("dialog[open]")
+    return this.busy || this.refreshing || this.pauseReasonOpen || !!this.root.querySelector("dialog[open]")
       || !!document.activeElement?.matches("input, textarea, [role=slider]");
   }
 
@@ -615,5 +632,5 @@ class PlanningApplication {
 export async function startPlanner(root: HTMLElement, accountHost: HTMLElement): Promise<void> {
   const client = new PlanningClient();
   const account = await authenticate(root, client);
-  await new PlanningApplication(root, client, account.email!, accountHost).mount();
+  await new PlanningApplication(root, client, account.email!, accountHost, account.accountKey!).mount();
 }

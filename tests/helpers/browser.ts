@@ -41,20 +41,22 @@ export interface Backend {
   receipts: Map<string, unknown>;
 }
 
-export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: boolean }>({
+export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: boolean; firstVisit: boolean }>({
   signedIn: [false, { option: true }],
   expired: [false, { option: true }],
-  backend: async ({ context, signedIn, expired }, use) => {
+  firstVisit: [false, { option: true }],
+  backend: async ({ context, signedIn, expired, firstVisit }, use) => {
     const state: Backend = { data: dashboard(), weekly: overview(), requests: [], stops: [], offline: false, rejectWrites: false, isDeleted: false, loseNextAcknowledgement: false, malformedAcknowledgement: false, failSignIn: false, previewStatus: 200, protocolVersion: 1, receipts: new Map() };
     // Seed once per browser context, not on reload/sign-out or each new tab.
-    await context.addInitScript(({ signedIn, initialSession, authKey, privacyKey, version }) => {
+    await context.addInitScript(({ signedIn, initialSession, authKey, privacyKey, version, firstVisit, onboardingKey }) => {
       if (localStorage.getItem("prune:test:seeded")) return;
       localStorage.setItem("prune:test:seeded", "true");
+      if (!firstVisit) localStorage.setItem(onboardingKey, "done");
       if (signedIn) {
         localStorage.setItem(privacyKey, JSON.stringify({ version, acknowledgedAt: new Date().toISOString() }));
         localStorage.setItem(authKey, JSON.stringify(initialSession));
       }
-    }, { signedIn, initialSession: session(expired ? -10 : 3600), authKey: AUTH_KEY, privacyKey: PRIVACY_ACKNOWLEDGEMENT_KEY, version: PRIVACY_POLICY_VERSION });
+    }, { signedIn, initialSession: session(expired ? -10 : 3600), authKey: AUTH_KEY, privacyKey: PRIVACY_ACKNOWLEDGEMENT_KEY, version: PRIVACY_POLICY_VERSION, firstVisit, onboardingKey: `prune:onboarding:v1:${PROJECT}:${USER_ID}` });
     await context.route(`${PROJECT}/**`, async (route) => {
       const request = route.request();
       const url = new URL(request.url());
