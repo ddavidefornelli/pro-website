@@ -13,6 +13,7 @@ export function openFirstTaskOnboarding(
   data: Dashboard,
   create: (outcome: string, minutes: number) => Promise<void>,
   start: () => Promise<void>,
+  tour: (start: () => Promise<void>) => void,
 ): void {
   const key = onboardingKey(accountKey);
   try { if (localStorage.getItem(key)) return; } catch { /* Storage may be unavailable. */ }
@@ -41,8 +42,8 @@ export function openFirstTaskOnboarding(
   const render = () => {
     dialog.replaceChildren();
     const top = element("div", undefined, "onboarding-top");
-    top.append(element("span", step === 3 ? "READY WHEN YOU ARE" : `${step} OF 2`, "onboarding-eyebrow"));
-    top.append(actionButton(step === 3 ? "Close" : "Skip for now", close));
+    top.append(element("span", `${step} OF 2`, "onboarding-eyebrow"));
+    top.append(actionButton("Skip for now", close));
     const progress = element("div", undefined, "onboarding-progress");
     progress.setAttribute("aria-hidden", "true");
     for (let index = 1; index <= 2; index++) {
@@ -50,13 +51,12 @@ export function openFirstTaskOnboarding(
       segment.classList.toggle("is-done", index <= step);
       progress.append(segment);
     }
-    const heading = element("h1", step === 1 ? "Start with one small win." : step === 2 ? "Make a little space for it." : "Your first task is ready.");
+    const heading = element("h1", step === 1 ? "Start with one small win." : "Make a little space for it.");
     heading.id = "first-task-heading";
     heading.tabIndex = -1;
     const description = element("p", step === 1
       ? "What’s one thing you’d like to finish today?"
-      : step === 2 ? "Choose a realistic estimate. A small, focused session is a great place to start."
-      : "One clear outcome. One focused session. Start now, or come back when you’re ready.", "muted");
+      : "Choose a realistic estimate. A small, focused session is a great place to start.", "muted");
     dialog.append(top, progress, heading, description);
     const form = element("form", undefined, "onboarding-form");
     const actions = element("div", undefined, "onboarding-actions");
@@ -104,8 +104,9 @@ export function openFirstTaskOnboarding(
         try {
           await create(outcome, estimate.minutes());
           remember();
-          step = 3;
-          render();
+          dialog.close();
+          dialog.remove();
+          tour(start);
         } catch (cause) {
           error.textContent = errorMessage(cause);
           error.hidden = false;
@@ -114,22 +115,6 @@ export function openFirstTaskOnboarding(
           submit.textContent = "Create my first task";
         } finally { busy = false; }
       });
-    } else {
-      form.append(element("p", outcome, "onboarding-outcome"));
-      const focus = actionButton("Start focusing", async () => {
-        if (busy) return;
-        busy = true;
-        dialog.querySelectorAll("button").forEach((button) => { button.disabled = true; });
-        try { await start(); busy = false; close(); }
-        catch (cause) {
-          error.textContent = errorMessage(cause);
-          error.hidden = false;
-          busy = false;
-          dialog.querySelectorAll("button").forEach((button) => { button.disabled = false; });
-        }
-      });
-      focus.className = "onboarding-primary";
-      actions.append(actionButton("I’ll do it later", close), focus);
     }
     form.append(error, actions);
     dialog.append(form);

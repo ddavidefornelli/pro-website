@@ -9,6 +9,7 @@ import { errorMessage } from "./errors";
 import { isDayComplete, PLANNER_LIMITS, trackedSeconds } from "./planner";
 import { formatDuration } from "./time";
 import { openFirstTaskOnboarding } from "./onboarding";
+import { openPlannerTour } from "./tour";
 
 type View = "today" | "focus" | "tomorrow" | "habits" | "profile";
 
@@ -102,7 +103,7 @@ class PlanningApplication {
         this.applyDashboard(await this.client.dashboard());
         this.view = "focus";
         this.render();
-      });
+      }, (start) => this.openTour(start));
     }
     const checkReview = async () => {
       await this.client.generateIfDue().catch(() => { /* Server quotas enforce retry backoff. */ });
@@ -542,9 +543,25 @@ class PlanningApplication {
     );
   }
 
+  private openTour(start?: () => Promise<void>): void {
+    if (this.data?.activeTask?.startedAt != null) return;
+    const previous = this.view;
+    openPlannerTour(this.root, (view) => {
+      this.view = view;
+      this.render();
+    }, (started) => {
+      if (started) return;
+      this.view = previous;
+      this.render();
+      this.content.querySelector<HTMLElement>(start ? ".task > button" : ".planner-tour-replay")?.focus();
+    }, start);
+  }
+
   private renderHabits(): void {
     const heading = element("div", undefined, "overview-heading");
-    heading.append(this.account);
+    const tour = this.button("Take a quick tour", () => this.openTour());
+    tour.className = "planner-tour-replay";
+    heading.append(tour, this.account);
     this.content.append(heading);
     this.activityCalendar.update(this.data!.today, this.data!.completions);
     this.content.append(
