@@ -84,7 +84,6 @@ body { margin: 0; }
 .tour-popup .muted { margin: 0; font-size: 14px; line-height: 1.5; }
 .tour-popup .onboarding-actions { margin-top: 12px; gap: 8px; }
 .tour-popup .onboarding-actions button { padding: 8px 10px; font-size: 12px; min-height: 44px; }
-.planner-tour-replay { font-size: 12px; }
 .onboarding-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .onboarding-eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; }
 .onboarding-top button { flex: none; padding: 8px; border-color: transparent; background: transparent; font-size: 12px; color: var(--muted); }

@@ -25,7 +25,8 @@ async function expectArtwork(page: Page, level: number): Promise<void> {
   await expect(artwork).toHaveCSS("visibility", level ? "visible" : "hidden");
   await expect(artwork).toHaveCSS("opacity", ["0", "0.32", "0.58", "0.94"][level]);
   const mask = await artwork.evaluate((node) => getComputedStyle(node).maskImage);
-  expect(mask).toContain("/prune-background.png");
+  expect(mask).toContain("/prune-background-mask.png");
+  await expect(artwork).toHaveCSS("mask-mode", "alpha");
   const canvas = page.locator("canvas.pixel-grid");
   await expect(canvas).toHaveAttribute("width", String(PIXEL_WIDTH));
   await expect(canvas).toHaveAttribute("height", String(PIXEL_HEIGHT));
@@ -58,6 +59,31 @@ async function expectStaticPixels(page: Page): Promise<void> {
 }
 
 test.use({ signedIn: true, timezoneId: "UTC" });
+
+test("the artwork mask has real transparency without luminance-mask support", async ({ page }) => {
+  await page.goto("/");
+  const mask = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = "/prune-background-mask.png";
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let transparent = 0;
+    let visible = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] === 0) transparent++;
+      if (data[i] > 128) visible++;
+    }
+    return { width: canvas.width, height: canvas.height, transparent, visible };
+  });
+  expect(mask.width / mask.height).toBe(2);
+  expect(mask.transparent).toBeGreaterThan(0);
+  expect(mask.visible).toBeGreaterThan(0);
+});
 
 for (const width of [390, 1440]) {
   test.describe(`completion grid at ${width}px`, () => {

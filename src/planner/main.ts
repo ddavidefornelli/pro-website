@@ -553,15 +553,13 @@ class PlanningApplication {
       if (started) return;
       this.view = previous;
       this.render();
-      this.content.querySelector<HTMLElement>(start ? ".task > button" : ".planner-tour-replay")?.focus();
+      this.content.querySelector<HTMLElement>(".task > button")?.focus();
     }, start);
   }
 
   private renderHabits(): void {
     const heading = element("div", undefined, "overview-heading");
-    const tour = this.button("Take a quick tour", () => this.openTour());
-    tour.className = "planner-tour-replay";
-    heading.append(tour, this.account);
+    heading.append(this.account);
     this.content.append(heading);
     this.activityCalendar.update(this.data!.today, this.data!.completions);
     this.content.append(

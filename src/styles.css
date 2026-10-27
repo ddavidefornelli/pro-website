@@ -53,9 +53,12 @@ body:has(#app[data-completion-level]:not([data-completion-level="0"]))::before {
 .cyber-artwork {
   visibility: hidden;
   opacity: 0;
-  mask: url("/prune-background.png") center / auto
+  /* Alpha is baked into the asset: older Safari ignores mask-mode: luminance. */
+  -webkit-mask: url("/prune-background-mask.png") center / auto
     clamp(70svh, 50vw, 100svh) no-repeat;
-  mask-mode: luminance;
+  mask: url("/prune-background-mask.png") center / auto
+    clamp(70svh, 50vw, 100svh) no-repeat;
+  mask-mode: alpha;
   transition: opacity 0.8s ease, visibility 0.8s;
 }
 .pixel-grid {
