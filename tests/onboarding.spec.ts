@@ -17,10 +17,15 @@ for (const width of [1100, 390]) {
     await dialog.getByRole("button", { name: "Next: set a time estimate" }).click();
     await expect(estimate.getByRole("slider")).toHaveAttribute("aria-valuenow", "35");
     await estimate.getByRole("button", { name: "Create my first task" }).click();
-    await expect(page.getByRole("heading", { name: "Your first task is ready." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your task is here" })).toBeVisible();
     await synced(page);
     expect(backend.data.todayTasks).toHaveLength(1);
     expect(backend.data.todayTasks[0]!.estimatedMinutes).toBe(35);
+    expect(backend.data.activeTask).toBeNull();
+    await expect(page.getByRole("button", { name: "Start focusing", exact: true })).toHaveCount(0);
+    for (let step = 0; step < 4; step++) {
+      await page.locator(".tour-popup").getByRole("button", { name: "Next", exact: true }).click();
+    }
     await page.getByRole("button", { name: "Start focusing", exact: true }).click();
     await expect(page.locator("#focus-timer")).toBeVisible();
     await expect(page.locator(".first-task-dialog")).toHaveCount(0);
