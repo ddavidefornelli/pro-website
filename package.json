@@ -8,25 +8,40 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
+    "check": "npm run typecheck && npm run lint && npm run format:check",
     "build:vercel": "node --experimental-strip-types scripts/build-release.mjs",
     "check:deployment": "node --experimental-strip-types scripts/check-deployment.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:unit": "node --experimental-strip-types --test tests/*.test.mjs && npm run test:reactivity",
+    "test:reactivity": "node --conditions=browser --experimental-strip-types --test tests/reactivity/*.test.mjs",
     "test:e2e": "playwright test",
     "check:production": "node --experimental-strip-types scripts/check-production.mjs"
   },
   "dependencies": {
+    "@clerk/backend": "^3.26.4",
+    "@clerk/clerk-js": "^6.42.0",
     "@supabase/supabase-js": "^2.118.0",
     "@vercel/analytics": "^2.0.1",
-    "solid-js": "^1.9.17",
-    "supabase": "^2.122.0"
+    "solid-js": "^1.9.17"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-solid": "^0.18.1",
+    "prettier": "^3.9.10",
+    "supabase": "^2.122.0",
     "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.4",
     "vite-plugin-solid": "^2.11.14"
   }

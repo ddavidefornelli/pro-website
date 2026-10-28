@@ -1,0 +1,75 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { isDayComplete, trackedSeconds } from "../src/planner/task-model.ts";
+import { onboardingKey, shouldOfferOnboarding } from "../src/planner/onboarding.ts";
+import { profileStats } from "../src/profile/profile-stats.ts";
+import { reviewCountdown } from "../src/reviews/review-countdown.ts";
+import { averageTaskTiming, completedTaskTimings } from "../src/shared/task-timing.ts";
+import { dashboard, persistence } from "./helpers/queue.mjs";
+
+test("day completion requires a nonempty plan with every task complete", () => {
+  assert.equal(isDayComplete([]), false);
+  assert.equal(isDayComplete([{ status: "completed" }, { status: "planned" }]), false);
+  assert.equal(isDayComplete([{ status: "completed" }, { status: "completed" }]), true);
+});
+
+test("focus time excludes pauses and does not decrease when a clock rolls back", () => {
+  assert.equal(trackedSeconds({ actualSeconds: 30, startedAt: null }, 200), 30);
+  assert.equal(trackedSeconds({ actualSeconds: 30, startedAt: 100 }, 120), 50);
+  assert.equal(trackedSeconds({ actualSeconds: 30, startedAt: 100 }, 90), 30);
+});
+
+test("profile statistics use calendar dates across month boundaries and ignore future totals", () => {
+  const data = dashboard(Date.parse("2026-03-01T12:00:00Z") / 1000);
+  data.completions = [
+    { day: "2026-02-26", count: 1 }, { day: "2026-02-27", count: 1 },
+    { day: "2026-02-27", count: 1 }, { day: "2026-02-28", count: 1 },
+    { day: "2026-03-02", count: 99 },
+  ];
+  data.todayTasks = [{ actualSeconds: 30, startedAt: data.serverNow - 60, estimatedMinutes: 30 }];
+  assert.deepEqual(profileStats(data), {
+    totalCompleted: 4, activeDays: 3, currentStreak: 3, bestStreak: 3,
+    todayCompleted: 0, weekCompleted: 4, monthCompleted: 0,
+    todayFocusSeconds: 90, todayEstimatedMinutes: 30,
+  });
+  data.today = "2026-03-02";
+  data.completions.pop();
+  assert.equal(profileStats(data).currentStreak, 0);
+});
+
+test("onboarding is scoped to an account and never offered over existing history", () => {
+  const { storage } = persistence();
+  const data = dashboard();
+  assert.equal(shouldOfferOnboarding(data, "alice", storage), true);
+  storage.setItem(onboardingKey("alice"), "done");
+  assert.equal(shouldOfferOnboarding(data, "alice", storage), false);
+  assert.equal(shouldOfferOnboarding(data, "bob", storage), true);
+  data.completions = [{ day: data.today, count: 1 }];
+  assert.equal(shouldOfferOnboarding(data, "bob", storage), false);
+  assert.equal(shouldOfferOnboarding(dashboard(), "alice", { getItem() { throw new Error("Storage unavailable"); } }), true);
+});
+
+test("review countdown honors the server instant, clamps overdue values and rejects invalid dates", () => {
+  const target = Date.parse("2026-10-25T16:00:00Z");
+  const week = { nextUpdate: "2026-10-25", nextUpdateAt: new Date(target).toISOString() };
+  assert.deepEqual(reviewCountdown(week, target - 90_061_000).values, [1, 1, 1, 1]);
+  const due = reviewCountdown(week, target + 1000);
+  assert.equal(due.due, true);
+  assert.deepEqual(due.values, [0, 0, 0, 0]);
+  assert.equal(due.progress, 1);
+  assert.equal(reviewCountdown({ nextUpdate: "not-a-date" }), null);
+});
+
+test("timing comparisons use the same completed tasks with recorded time", () => {
+  const tasks = [
+    { id: "recorded", status: "completed", completedOn: "2026-10-20", estimatedMinutes: 60, actualSeconds: 7200 },
+    { id: "unrecorded", status: "completed", completedOn: "2026-10-21", estimatedMinutes: 30, actualSeconds: 0 },
+    { id: "unfinished", status: "active", completedOn: null, estimatedMinutes: 30, actualSeconds: 1200 },
+    { id: "other-week", status: "completed", completedOn: "2026-10-10", estimatedMinutes: 30, actualSeconds: 600 },
+  ];
+  assert.equal(completedTaskTimings(tasks, "2026-10-19", "2026-10-25").length, 2);
+  assert.deepEqual(averageTaskTiming(tasks, "2026-10-19", "2026-10-25"), {
+    count: 1, omittedCount: 1, estimatedSeconds: 3600, actualSeconds: 7200, differenceSeconds: 3600, severity: "red",
+  });
+  assert.equal(averageTaskTiming([], "2026-10-19", "2026-10-25"), null);
+});

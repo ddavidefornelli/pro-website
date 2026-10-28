@@ -1,14 +1,15 @@
 import { test, expect, AUTH_KEY, session } from "./helpers/browser";
 import { PRIVACY_ACKNOWLEDGEMENT_KEY } from "../src/planner/privacy-state";
 
-test("home is signup, with an unchecked notice and a top-right Mac install button", async ({ page, backend }) => {
+test("home is signup, with an unchecked notice and no site header", async ({ page, backend }) => {
   await page.goto("/");
   await expect(page).toHaveTitle("prune — Your day. Three priorities.");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make room for what matters.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("DO LESS.ACHIEVE MORE.");
   await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
   await expect(page.getByRole("checkbox")).not.toBeChecked();
   await expect(page.getByRole("button", { name: "Send code" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Install for Mac" })).toHaveAttribute("download", "prune.dmg");
+  await expect(page.locator(".site-header")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Install for Mac" })).toHaveCount(0);
   expect(backend.requests).toEqual([]);
   expect(await page.locator("script[src*='googletagmanager'],script[src*='goatcounter'],script[src*='vercel-scripts']").count()).toBe(0);
 });
@@ -62,7 +63,7 @@ test("privacy storage failure sends no account request and does not claim signup
   await page.getByRole("button", { name: "Send code" }).click();
   await expect(page.getByRole("alert")).toContainText("No sign-in request was sent");
   expect(backend.requests).toHaveLength(0);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make room for what matters.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("DO LESS.ACHIEVE MORE.");
 });
 
 test("an outdated notice gates even a saved session, and the full policy is available before sign-in", async ({ page, backend }) => {
@@ -90,17 +91,6 @@ test("failed sign-in stays on the email form without exposing upstream errors", 
   await expect(page.getByRole("button", { name: "Send code" })).toBeEnabled();
 });
 
-test("downloads for Mac without navigating away from the app", async ({ page }) => {
-  await page.goto("/");
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Install for Mac" }).click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("prune.dmg");
-  expect(await download.failure()).toBeNull();
-  await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make room for what matters.");
-});
-
 test("the existing direct download page still works without account services", async ({ page, backend }) => {
   const downloadPromise = page.waitForEvent("download");
   await page.goto("/download");
@@ -121,9 +111,6 @@ test("signup fits narrow phones and scrolls naturally in short landscape windows
     await page.setViewportSize(viewport);
     const width = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(width, `No horizontal overflow at ${viewport.width}×${viewport.height}`).toBeLessThanOrEqual(viewport.width);
-    await expect(page.getByRole("link", { name: "Install for Mac" })).toBeInViewport({ ratio: 1 });
-    const box = (await page.getByRole("link", { name: "Install for Mac" }).boundingBox())!;
-    expect(box.x + box.width).toBeGreaterThan(viewport.width / 2);
     await page.getByRole("button", { name: "Send code" }).evaluate((button) => button.scrollIntoView({ block: "center" }));
     await expect(page.getByRole("button", { name: "Send code" })).toBeInViewport({ ratio: 1 });
     expect(await page.getByRole("textbox", { name: "Email address" }).evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);

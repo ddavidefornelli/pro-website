@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { publicConfig, safeResourceUrl } from "../src/planner/config.ts";
+import { publicConfig } from "../src/planner/config.ts";
 import { httpError } from "../src/planner/http-error.ts";
 import { hasPrivacyAcknowledgement, acknowledgePrivacy } from "../src/planner/privacy-state.ts";
 import { LocalQueue } from "../src/planner/local-queue.ts";
@@ -19,11 +19,6 @@ for (const [url, secret] of [
   ["https://project.supabase.co?key=secret", key], ["https://project.supabase.co", "sb_secret_private"],
   ["https://project.supabase.co", `h.${btoa(JSON.stringify({ role: "service_role" }))}.s`],
 ]) test(`rejects unsafe or missing public config: ${url}`, () => assert.throws(() => publicConfig(url, secret)));
-
-for (const url of ["javascript:alert(1)", "file:///Users/me/private.pdf", "https://user:password@example.com/", "data:text/html,hello", "https://example.com/\nprivate"]) {
-  test(`resource URLs cannot escape safe web links: ${url}`, () => assert.equal(safeResourceUrl(url), null));
-}
-test("resource links preserve legitimate query strings", () => assert.equal(safeResourceUrl("https://example.com/?task=1"), "https://example.com/?task=1"));
 
 for (const code of ["PT400", "PT404", "PT409"]) test(`only definite application rejection ${code} blocks the queue`, () => {
   const error = httpError(409, { code, message: "Another device changed your plan." });

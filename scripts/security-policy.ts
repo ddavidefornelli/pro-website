@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { hasMarketingTracker } from "./tracking-policy.ts";
+import { PRODUCTION_ORIGINS } from "../src/shared/site.ts";
 
 // Deliberately no origin-wide allowlist: do not permit Storage, arbitrary RPCs,
 // other Edge Functions, Realtime or another Supabase tenant.
@@ -9,7 +10,7 @@ export const API_PATHS = [
 ] as const;
 
 // Narrow exception for Vercel's managed (non-SRI-pinned) analytics script.
-export const ANALYTICS_ORIGINS = ["https://www.prune.win", "https://prune.win"];
+export const ANALYTICS_ORIGINS = PRODUCTION_ORIGINS;
 export const ANALYTICS_SCRIPTS = ANALYTICS_ORIGINS.map((origin) => `${origin}/_vercel/insights/script.js`);
 export const ANALYTICS_CONNECTIONS = ANALYTICS_ORIGINS.map((origin) => `${origin}/_vercel/insights/`);
 

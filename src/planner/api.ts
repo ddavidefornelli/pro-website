@@ -1,84 +1,31 @@
-import { BrowserCloud } from "./browser";
-import { LocalQueue, QUEUE_STORAGE_VERSION } from "./local-queue";
+import { BrowserCloud } from "./browser.ts";
+import { LocalQueue, QUEUE_STORAGE_VERSION } from "./local-queue.ts";
 
-export interface TaskResource {
-  id: string;
-  label: string;
-  target: string;
-  kind: "link" | "file";
+import type { AuthStatus, Dashboard, Task, WeeklyOverview } from "./types";
+import { WEEKLY_AI_VERSION } from "./constants.ts";
+
+// Keep the public type surface compatible with the in-progress auth transport.
+export type {
+  AuthStatus,
+  Dashboard,
+  Task,
+  WeeklyOverview,
+  WeeklyReview,
+  ReviewStop,
+} from "./types";
+
+interface CloudTransport {
+  onAccountChange: () => void;
+  execute<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+  dispose(): Promise<void>;
 }
 
-export interface Task {
-  /** Mutation-response metadata; omitted from dashboard task rows. */
-  serverRevision?: number;
-  id: string;
-  outcome: string;
-  /** Legacy shared-backend field; tasks have equal importance in the web UI. */
-  isPriority: boolean;
-  plannedFor: string;
-  estimatedMinutes: number;
-  actualSeconds: number;
-  status: "planned" | "active" | "completed";
-  startedAt: number | null;
-  completedOn: string | null;
-  createdAt: number;
-  resources: TaskResource[];
-}
-
-export interface Dashboard {
-  revision?: number;
-  today: string;
-  tomorrow: string;
-  todayTasks: Task[];
-  tomorrowTasks: Task[];
-  activeTask: Task | null;
-  canPlanTomorrow: boolean;
-  completions: { day: string; count: number }[];
-  serverNow: number;
-}
-
-export interface ReviewStop {
-  id: number;
-  taskId: string;
-  reason: string;
-  stoppedOn: string;
-}
-
-export interface WeeklyReview {
-  weekStart: string;
-  weekEnd: string;
-  generatedAt: number;
-  model: string;
-  activity: {
-    tasks: Pick<Task, "id" | "outcome" | "plannedFor" | "completedOn" | "status" | "estimatedMinutes" | "actualSeconds">[];
-    stops: ReviewStop[];
-    totalStops: number;
-    omittedStops: number;
-  };
-  analysis: {
-    summary: string;
-    mainReasons: { reason: string; evidenceStopIds: number[] }[];
-    improvements: string[];
-  };
-}
-
-export interface WeeklyOverview {
-  developmentUnlimited?: boolean;
-  settings: { enabled: boolean };
-  model: string;
-  available: boolean;
-  week: { start: string; end: string; nextUpdate: string; nextUpdateAt?: string };
-  status: "disabled" | "unavailable" | "pending" | "running" | "failed" | "no_data" | "up_to_date";
-  error: string | null;
-  reviews: WeeklyReview[];
-}
-
-export interface AuthStatus { configured: boolean; email: string | null; accountKey: string | null }
-
-/** Shared planner/outbox behavior, with a browser transport instead of Tauri IPC. */
+/** Shared planner/outbox behavior, independent of rendering and transport details. */
 export class PlanningClient {
-  private readonly cloud = new BrowserCloud();
-  constructor() {
+  private readonly cloud: CloudTransport;
+  private disposed = false;
+  constructor(cloud: CloudTransport = new BrowserCloud()) {
+    this.cloud = cloud;
     this.cloud.onAccountChange = () => {
       void this.queue?.stop();
       window.location.reload();
@@ -88,88 +35,211 @@ export class PlanningClient {
   private queue: LocalQueue | null = null;
   private accountKey: string | null = null;
   private queueReady: Promise<void> | null = null;
+  private readonly cleanups: (() => void)[] = [];
+
+  async dispose(): Promise<void> {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.onQueueChange = () => {};
+    this.cloud.onAccountChange = () => {};
+    this.cleanups.splice(0).forEach((cleanup) => cleanup());
+    await Promise.all([this.queue?.stop(), this.cloud.dispose()]);
+  }
   onQueueChange: () => void = () => {};
-  get pendingCount(): number { return this.queue?.pendingCount ?? 0; }
-  get syncBlocked(): boolean { return this.queue?.blocked ?? false; }
-  cachedDashboard(): Dashboard | null { return this.queue?.snapshot() ?? null; }
-  sync(): Promise<void> { return this.queue?.sync() ?? Promise.resolve(); }
-  discardPending(): Promise<void> { return this.queue?.discardPending() ?? Promise.resolve(); }
+  get pendingCount(): number {
+    return this.queue?.pendingCount ?? 0;
+  }
+  get syncBlocked(): boolean {
+    return this.queue?.blocked ?? false;
+  }
+  cachedDashboard(): Dashboard | null {
+    return this.queue?.snapshot() ?? null;
+  }
+  sync(): Promise<void> {
+    return this.queue?.sync() ?? Promise.resolve();
+  }
+  discardPending(): Promise<void> {
+    return this.queue?.discardPending() ?? Promise.resolve();
+  }
 
   private prepareQueue(accountKey: string): void {
-    if (this.queue) return;
-    if (!navigator.locks) throw new Error("Safe local saving requires HTTPS and a browser with Web Locks support. Update your browser before using prune.");
+    if (this.queue) {
+      if (accountKey !== this.accountKey)
+        throw new Error(
+          "The account changed. Reload before accessing planner data.",
+        );
+      return;
+    }
+    if (!navigator.locks)
+      throw new Error(
+        "Safe local saving requires HTTPS and a browser with Web Locks support. Update your browser before using prune.",
+      );
     this.accountKey = accountKey;
     const storageKey = `pro:planner:v${QUEUE_STORAGE_VERSION}:${accountKey}`;
-    this.queue = new LocalQueue(storageKey, localStorage,
+    this.queue = new LocalQueue(
+      storageKey,
+      localStorage,
       async (name, work) => await navigator.locks.request(name, work),
       async (command) => {
         // Never send retryable writes to an old server that ignores idempotency keys.
-        if (!this.queueReady) this.queueReady = this.request<{ version: number }>("planner_call", {
-          action: "queue_protocol", args: {}, timezone: this.timezone,
-        }).then((protocol) => {
-          if (protocol?.version !== 1) throw {
-            code: "configuration",
-            message: "The server does not support this queue version. Apply Supabase migration 20261017000300_local_queue.sql. Your changes remain on this device; no queued writes were sent.",
-          };
-        }).catch((error: unknown) => {
-          this.queueReady = null;
-          if (typeof error === "object" && error !== null && "code" in error && error.code === "validation") {
-            // Older planner dispatchers reject queue_protocol. Keep this
-            // retryable: no mutation has been sent and the outbox must not block.
-            throw {
-              code: "configuration",
-              message: "The server does not support queued sync. Apply Supabase migration 20261017000300_local_queue.sql. Your changes remain on this device; no queued writes were sent.",
-            };
-          }
-          // Transport errors are already sanitized. Preserve network/auth/server
-          // failures rather than incorrectly diagnosing a missing migration.
-          throw error;
-        });
+        if (!this.queueReady)
+          this.queueReady = this.request<{ version: number }>("planner_call", {
+            action: "queue_protocol",
+            args: {},
+            timezone: this.timezone,
+          })
+            .then((protocol) => {
+              if (protocol?.version !== 1)
+                throw {
+                  code: "configuration",
+                  message:
+                    "The server does not support this queue version. Apply Supabase migration 20261017000300_local_queue.sql. Your changes remain on this device; no queued writes were sent.",
+                };
+            })
+            .catch((error: unknown) => {
+              this.queueReady = null;
+              if (
+                typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                error.code === "validation"
+              ) {
+                // Older planner dispatchers reject queue_protocol. Keep this
+                // retryable: no mutation has been sent and the outbox must not block.
+                throw {
+                  code: "configuration",
+                  message:
+                    "The server does not support queued sync. Apply Supabase migration 20261017000300_local_queue.sql. Your changes remain on this device; no queued writes were sent.",
+                };
+              }
+              // Transport errors are already sanitized. Preserve network/auth/server
+              // failures rather than incorrectly diagnosing a missing migration.
+              throw error;
+            });
         await this.queueReady;
         return this.request<Task>("planner_call", {
-          action: command.action, timezone: command.timezone,
-          args: { ...command.args, _requestId: command.requestId, _at: command.at, _revision: command.revision, _accountKey: accountKey },
+          action: command.action,
+          timezone: command.timezone,
+          args: {
+            ...command.args,
+            _requestId: command.requestId,
+            _at: command.at,
+            _revision: command.revision,
+            _accountKey: accountKey,
+          },
         });
       },
-      () => this.request<Dashboard>("planner_call", { action: "dashboard", args: { _accountKey: accountKey }, timezone: this.timezone }));
+      () =>
+        this.request<Dashboard>("planner_call", {
+          action: "dashboard",
+          args: { _accountKey: accountKey },
+          timezone: this.timezone,
+        }),
+    );
     this.queue.onChange = () => this.onQueueChange();
-    window.addEventListener("online", () => { void this.sync(); });
-    window.addEventListener("storage", (event) => {
+    const online = () => {
+      void this.sync();
+    };
+    const storage = (event: StorageEvent) => {
       if (event.key === storageKey) void this.queue?.refreshFromStorage();
+    };
+    window.addEventListener("online", online);
+    window.addEventListener("storage", storage);
+    this.cleanups.push(() => {
+      window.removeEventListener("online", online);
+      window.removeEventListener("storage", storage);
     });
   }
 
-  private async request<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-    try { return await this.cloud.execute<T>(command, args); }
-    catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "account_deleted") {
+  private async request<T>(
+    command: string,
+    args: Record<string, unknown> = {},
+  ): Promise<T> {
+    if (this.disposed) throw new Error("The planner client is closed.");
+    try {
+      const result = await this.cloud.execute<T>(command, args);
+      if (this.disposed) throw new Error("The planner client is closed.");
+      return result;
+    } catch (error) {
+      if (this.disposed) throw error;
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "account_deleted"
+      ) {
         await this.cloud.execute("sign_out");
         window.location.reload();
       }
-      if (this.accountKey && typeof error === "object" && error !== null && "code" in error && ["unauthorized", "account_changed"].includes(String(error.code))) {
+      if (
+        this.accountKey &&
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        ["unauthorized", "account_changed"].includes(String(error.code))
+      ) {
         // Invalid credentials or another window's account switch must clear old UI state.
         window.location.reload();
       }
       throw error;
     }
   }
-  private call<T>(action: string, args: Record<string, unknown> = {}): Promise<T> {
-    if (!["dashboard", "weekly_overview", "set_weekly_ai_enabled"].includes(action)) {
-      if (!this.queue) return Promise.reject(new Error("Sign in and load your planner before making changes."));
+  private call<T>(
+    action: string,
+    args: Record<string, unknown> = {},
+  ): Promise<T> {
+    if (this.disposed)
+      return Promise.reject(new Error("The planner client is closed."));
+    if (
+      !["dashboard", "weekly_overview", "set_weekly_ai_enabled"].includes(
+        action,
+      )
+    ) {
+      if (!this.queue)
+        return Promise.reject(
+          new Error("Sign in and load your planner before making changes."),
+        );
       return this.queue.enqueue(action, args, this.timezone) as Promise<T>;
     }
-    return this.request("planner_call", { action, args: { ...args, ...(this.accountKey ? { _accountKey: this.accountKey } : {}) }, timezone: this.timezone });
+    return this.request("planner_call", {
+      action,
+      args: {
+        ...args,
+        ...(this.accountKey ? { _accountKey: this.accountKey } : {}),
+      },
+      timezone: this.timezone,
+    });
   }
   private async loadAccount(status: AuthStatus): Promise<AuthStatus> {
     if (status.accountKey) {
-      const account = await this.request<{ isDeleted: boolean }>("planner_call", {
-        action: "account_status", args: { _accountKey: status.accountKey }, timezone: this.timezone,
-      });
-      if (account.isDeleted) {
-        await this.request("sign_out");
-        throw new Error("This account has been marked for deletion and can no longer be used.");
-      }
+      // Identity has already been verified with Auth. A planner-only network
+      // outage may use that account's existing cache, never another identity's.
       this.prepareQueue(status.accountKey);
+      let account: { isDeleted: boolean };
+      try {
+        account = await this.request("planner_call", {
+          action: "account_status",
+          args: { _accountKey: status.accountKey },
+          timezone: this.timezone,
+        });
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "network" &&
+          this.cachedDashboard()
+        )
+          return status;
+        throw error;
+      }
+      if (account.isDeleted) {
+        await this.queue?.stop();
+        await this.request("sign_out");
+        throw new Error(
+          "This account has been marked for deletion and can no longer be used.",
+        );
+      }
     }
     return status;
   }
@@ -180,22 +250,39 @@ export class PlanningClient {
     await this.request("send_code", { email });
   }
   async verifyCode(email: string, code: string): Promise<AuthStatus> {
-    return this.loadAccount(await this.request<AuthStatus>("verify_code", { email, code }));
+    return this.loadAccount(
+      await this.request<AuthStatus>("verify_code", { email, code }),
+    );
   }
   async signOut(): Promise<void> {
     await this.queue?.stop();
-    try { await this.request("sign_out"); }
-    catch (error) { this.queue?.resume(); throw error; }
+    try {
+      await this.request("sign_out");
+    } catch (error) {
+      if (!this.disposed) this.queue?.resume();
+      throw error;
+    }
   }
   async deleteAccount(): Promise<void> {
     // Deletion is an online account operation, never an optimistic queued write.
     await this.queue?.stop();
     try {
-      const result = await this.request<{ isDeleted: boolean }>("planner_call", {
-        action: "delete_account", args: { _accountKey: this.accountKey }, timezone: this.timezone,
-      });
-      if (result?.isDeleted !== true) throw new Error("Account deletion was not confirmed. Please try again.");
-    } catch (error) { this.queue?.resume(); throw error; }
+      const result = await this.request<{ isDeleted: boolean }>(
+        "planner_call",
+        {
+          action: "delete_account",
+          args: { _accountKey: this.accountKey },
+          timezone: this.timezone,
+        },
+      );
+      if (result?.isDeleted !== true)
+        throw new Error(
+          "Account deletion was not confirmed. Please try again.",
+        );
+    } catch (error) {
+      if (!this.disposed) this.queue?.resume();
+      throw error;
+    }
     // Do not resume the outbox if local sign-out fails after confirmed deletion.
     await this.request("sign_out");
   }
@@ -205,7 +292,11 @@ export class PlanningClient {
     this.generatingReview = true;
     try {
       const overview = await this.weeklyOverview();
-      if (overview.settings.enabled && overview.available && ["pending", "failed"].includes(overview.status)) {
+      if (
+        overview.settings.enabled &&
+        overview.available &&
+        ["pending", "failed"].includes(overview.status)
+      ) {
         await this.retryWeeklyReview();
       }
     } finally {
@@ -213,10 +304,13 @@ export class PlanningClient {
     }
   }
   async dashboard(): Promise<Dashboard> {
+    if (this.disposed) throw new Error("The planner client is closed.");
     if (!this.queue) return this.call("dashboard");
     let cached = this.queue.snapshot();
-    if (!cached) { await this.queue.sync(); cached = this.queue.snapshot(); }
-    else void this.queue.sync();
+    if (!cached) {
+      await this.queue.sync();
+      cached = this.queue.snapshot();
+    } else void this.queue.sync();
     if (!cached) throw new Error(this.queue.status);
     return cached;
   }
@@ -226,20 +320,21 @@ export class PlanningClient {
   }
 
   setWeeklyAiEnabled(enabled: boolean): Promise<WeeklyOverview> {
-    return this.call("set_weekly_ai_enabled", { enabled, consentVersion: "weekly-ai-v1" });
+    return this.call("set_weekly_ai_enabled", {
+      enabled,
+      consentVersion: WEEKLY_AI_VERSION,
+    });
   }
 
   retryWeeklyReview(): Promise<void> {
     return this.request("generate_weekly_review", { timezone: this.timezone });
   }
 
-  async previewReview(): Promise<{ review?: WeeklyReview; noData?: boolean }> {
-    await this.sync();
-    if (this.pendingCount) throw new Error("Sync pending planner changes before creating an AI review.");
-    return this.request("generate_weekly_review", { timezone: this.timezone, preview: true });
-  }
-
-  create(outcome: string, day: string, estimatedMinutes: number): Promise<Task> {
+  create(
+    outcome: string,
+    day: string,
+    estimatedMinutes: number,
+  ): Promise<Task> {
     return this.call("create_task", { outcome, day, estimatedMinutes });
   }
 
@@ -249,14 +344,6 @@ export class PlanningClient {
 
   changeEstimate(id: string, minutes: number): Promise<Task> {
     return this.call("change_estimate", { id, minutes });
-  }
-
-  addLink(id: string, label: string, url: string): Promise<Task> {
-    return this.call("add_task_link", { id, label, target: url });
-  }
-
-  removeResource(id: string, resourceId: string): Promise<Task> {
-    return this.call("remove_task_resource", { id, resourceId });
   }
 
   start(id: string): Promise<Task> {

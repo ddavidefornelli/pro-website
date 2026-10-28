@@ -9,10 +9,14 @@
     "jsxImportSource": "solid-js",
     "types": ["vite/client"],
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "scripts", "vite.config.ts", "playwright.config.ts", "tests"]
+  "include": ["src", "scripts", "vite.config.ts", "playwright.config.ts", "tests", "server", "api"]
 }

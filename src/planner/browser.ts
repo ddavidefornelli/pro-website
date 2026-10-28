@@ -1,21 +1,45 @@
-import { createClient, type AuthError, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  createClient,
+  type AuthError,
+  type Session,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
 import type { AuthStatus } from "./api";
-import { webConfig, type PublicConfig } from "./config";
-import { CloudError, httpError } from "./http-error";
-import { hasPrivacyAcknowledgement } from "./privacy-state";
+import { webConfig, type PublicConfig } from "./config.ts";
+import { CloudError, httpError } from "./http-error.ts";
+import { hasPrivacyAcknowledgement } from "./privacy-state.ts";
 
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 /** Bounded requests; no cookies or referrer are sent to the external API. */
-async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function apiFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs?: number,
+): Promise<Response> {
   const controller = new AbortController();
   const abort = () => controller.abort();
   const url = String(input);
-  const timeout = setTimeout(abort, url.includes("/functions/") ? 110_000 : url.includes("/logout") ? 5000 : 20_000);
+  const timeout = setTimeout(
+    abort,
+    timeoutMs ??
+      (url.includes("/functions/")
+        ? 110_000
+        : url.includes("/logout")
+          ? 5000
+          : 20_000),
+  );
   if (init?.signal?.aborted) abort();
   init?.signal?.addEventListener("abort", abort, { once: true });
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal, credentials: "omit", cache: "no-store", redirect: "error", referrerPolicy: "no-referrer" });
+    const response = await fetch(input, {
+      ...init,
+      signal: controller.signal,
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+    });
     const reader = response.body?.getReader();
     if (!reader) return response;
     const chunks: Uint8Array[] = [];
@@ -27,18 +51,30 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
         length += value.byteLength;
         if (length > MAX_RESPONSE_BYTES) {
           await reader.cancel();
-          throw new CloudError("size", "The server response is too large. Please contact support.");
+          throw new CloudError(
+            "size",
+            "The server response is too large. Please contact support.",
+          );
         }
         chunks.push(value);
       }
-    } finally { reader.releaseLock(); }
+    } finally {
+      reader.releaseLock();
+    }
     const bytes = new Uint8Array(length);
     let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
     const headers = new Headers(response.headers);
     headers.delete("Content-Encoding");
     headers.delete("Content-Length");
-    return new Response(bytes, { status: response.status, statusText: response.statusText, headers });
+    return new Response(bytes, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   } finally {
     clearTimeout(timeout);
     init?.signal?.removeEventListener("abort", abort);
@@ -46,10 +82,25 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 }
 
 function authError(error: AuthError): CloudError {
-  if (error.status === 429) return new CloudError("rate_limited", "Too many sign-in attempts. Wait at least a minute before trying again.");
-  if (error.name === "AuthRetryableFetchError" || !error.status) return new CloudError("network", "Could not reach sign-in services. Check your connection and try again.");
-  if (error.status >= 500) return new CloudError("server", "Sign-in services are temporarily unavailable. Please try later or contact support.");
-  return new CloudError("auth", "Sign-in could not be completed. Check your email and code, or request a new code and try again.");
+  if (error.status === 429)
+    return new CloudError(
+      "rate_limited",
+      "Too many sign-in attempts. Wait at least a minute before trying again.",
+    );
+  if (error.name === "AuthRetryableFetchError" || !error.status)
+    return new CloudError(
+      "network",
+      "Could not reach sign-in services. Check your connection and try again.",
+    );
+  if (error.status >= 500)
+    return new CloudError(
+      "server",
+      "Sign-in services are temporarily unavailable. Please try later or contact support.",
+    );
+  return new CloudError(
+    "auth",
+    "Sign-in could not be completed. Check your email and code, or request a new code and try again.",
+  );
 }
 
 /**
@@ -63,13 +114,23 @@ export class BrowserCloud {
   private accountKey: string | null = null;
   private signingOut = false;
   private invalidated = false;
+  private readonly cleanups: (() => void)[] = [];
+
+  async dispose(): Promise<void> {
+    this.cleanups.splice(0).forEach((cleanup) => cleanup());
+    await this.client?.auth.stopAutoRefresh();
+  }
   onAccountChange: () => void = () => {};
 
   private sdk(): SupabaseClient {
     if (this.client) return this.client;
     // Constructing the SDK can restore/refresh a saved session. Defer even that
     // until the device-local notice has been durably acknowledged.
-    if (!hasPrivacyAcknowledgement(localStorage)) throw new CloudError("privacy", "Accept the Terms & Privacy before continuing.");
+    if (!hasPrivacyAcknowledgement(localStorage))
+      throw new CloudError(
+        "privacy",
+        "Accept the Terms & Privacy before continuing.",
+      );
     this.config = webConfig();
     this.client = createClient(this.config.url, this.config.publicKey, {
       auth: {
@@ -80,15 +141,28 @@ export class BrowserCloud {
       },
       global: { fetch: apiFetch },
     });
-    this.client.auth.onAuthStateChange((_event, session) => {
-      if (!session || this.key(session.user.id) !== this.accountKey) this.invalidateAccount();
+    const {
+      data: { subscription },
+    } = this.client.auth.onAuthStateChange((_event, session) => {
+      if (!session || this.key(session.user.id) !== this.accountKey)
+        this.invalidateAccount();
     });
-    window.addEventListener("storage", (event) => {
+    const storage = (event: StorageEvent) => {
       if (event.key !== `prune:auth:${this.config!.url}`) return;
       try {
-        const saved = event.newValue ? JSON.parse(event.newValue) as Session : null;
-        if (!saved?.user || this.key(saved.user.id) !== this.accountKey) this.invalidateAccount();
-      } catch { this.invalidateAccount(); }
+        const saved = event.newValue
+          ? (JSON.parse(event.newValue) as Session)
+          : null;
+        if (!saved?.user || this.key(saved.user.id) !== this.accountKey)
+          this.invalidateAccount();
+      } catch {
+        this.invalidateAccount();
+      }
+    };
+    window.addEventListener("storage", storage);
+    this.cleanups.push(() => {
+      subscription.unsubscribe();
+      window.removeEventListener("storage", storage);
     });
     return this.client;
   }
@@ -100,13 +174,23 @@ export class BrowserCloud {
     queueMicrotask(() => this.onAccountChange());
   }
 
-  private key(userId: string): string { return `${this.config!.url}:${userId}`; }
+  private key(userId: string): string {
+    return `${this.config!.url}:${userId}`;
+  }
 
   private async session(expected = this.accountKey): Promise<Session> {
     const { data, error } = await this.sdk().auth.getSession();
     if (error) throw authError(error);
-    if (!data.session) throw new CloudError("unauthorized", "Your session has expired. Please sign in again.");
-    if (expected && this.key(data.session.user.id) !== expected) throw new CloudError("account_changed", "The account changed. Reload before accessing planner data.");
+    if (!data.session)
+      throw new CloudError(
+        "unauthorized",
+        "Your session has expired. Please sign in again.",
+      );
+    if (expected && this.key(data.session.user.id) !== expected)
+      throw new CloudError(
+        "account_changed",
+        "The account changed. Reload before accessing planner data.",
+      );
     return data.session;
   }
 
@@ -114,7 +198,8 @@ export class BrowserCloud {
     const sdk = this.sdk();
     const { data, error } = await sdk.auth.getSession();
     if (error) throw authError(error);
-    if (!data.session) return { configured: true, email: null, accountKey: null };
+    if (!data.session)
+      return { configured: true, email: null, accountKey: null };
     // Verify identity with Auth before exposing a persistent account cache.
     const result = await sdk.auth.getUser(data.session.access_token);
     if (result.error) {
@@ -125,14 +210,26 @@ export class BrowserCloud {
       throw authError(result.error);
     }
     const user = result.data.user;
-    if (!user.email || user.is_anonymous || user.id !== data.session.user.id) throw new CloudError("unauthorized", "Sign in with an email account to use prune.");
+    if (!user.email || user.is_anonymous || user.id !== data.session.user.id)
+      throw new CloudError(
+        "unauthorized",
+        "Sign in with an email account to use prune.",
+      );
     const latest = await sdk.auth.getSession();
-    if (latest.data.session?.user.id !== user.id) throw new CloudError("account_changed", "The account changed during startup. Please sign in again.");
+    if (latest.data.session?.user.id !== user.id)
+      throw new CloudError(
+        "account_changed",
+        "The account changed during startup. Please sign in again.",
+      );
     this.accountKey = this.key(user.id);
     return { configured: true, email: user.email, accountKey: this.accountKey };
   }
 
-  private async post<T>(route: string, body: Record<string, unknown>, expected = this.accountKey): Promise<T> {
+  private async post<T>(
+    route: string,
+    body: Record<string, unknown>,
+    expected = this.accountKey,
+  ): Promise<T> {
     // Capture both identity and bearer token together. An account switch while
     // a request is in flight can never replay the old outbox into a new account.
     const session = await this.session(expected);
@@ -140,38 +237,75 @@ export class BrowserCloud {
     try {
       response = await apiFetch(`${this.config!.url}${route}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: this.config!.publicKey, Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: this.config!.publicKey,
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(body),
       });
     } catch (error) {
       if (error instanceof CloudError) throw error;
-      throw new CloudError("network", "Could not reach Supabase. Your pending changes remain on this device and will retry.");
+      throw new CloudError(
+        "network",
+        "Could not reach Supabase. Your pending changes remain on this device and will retry.",
+      );
     }
     let value: unknown = null;
-    try { value = await response.json(); }
-    catch {
-      if (response.ok) throw new CloudError("server", "The server returned an incomplete response. Your pending changes remain on this device.");
+    try {
+      value = await response.json();
+    } catch {
+      if (response.ok)
+        throw new CloudError(
+          "server",
+          "The server returned an incomplete response. Your pending changes remain on this device.",
+        );
     }
-    if (!response.ok) throw httpError(response.status, value, route.startsWith("/functions/"), body.preview === true);
+    if (!response.ok)
+      throw httpError(
+        response.status,
+        value,
+        route.startsWith("/functions/"),
+        body.preview === true,
+      );
     return value as T;
   }
 
-  async execute<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
+  async execute<T>(
+    command: string,
+    args: Record<string, unknown> = {},
+  ): Promise<T> {
     let result: unknown;
     switch (command) {
-      case "auth_status": result = await this.status(); break;
+      case "auth_status":
+        result = await this.status();
+        break;
       case "send_code": {
-        const { error } = await this.sdk().auth.signInWithOtp({ email: String(args.email) });
+        const { error } = await this.sdk().auth.signInWithOtp({
+          email: String(args.email),
+        });
         if (error) throw authError(error);
         result = null;
         break;
       }
       case "verify_code": {
-        const { data, error } = await this.sdk().auth.verifyOtp({ email: String(args.email), token: String(args.code), type: "email" });
+        const { data, error } = await this.sdk().auth.verifyOtp({
+          email: String(args.email),
+          token: String(args.code),
+          type: "email",
+        });
         if (error) throw authError(error);
-        if (!data.session || !data.user?.email || data.user.is_anonymous) throw new CloudError("auth", "The sign-in response was incomplete. Please try again.");
+        if (!data.session || !data.user?.email || data.user.is_anonymous)
+          throw new CloudError(
+            "auth",
+            "The sign-in response was incomplete. Please try again.",
+          );
         this.accountKey = this.key(data.user.id);
-        result = { configured: true, email: data.user.email, accountKey: this.accountKey };
+        result = {
+          configured: true,
+          email: data.user.email,
+          accountKey: this.accountKey,
+        };
         break;
       }
       case "sign_out": {
@@ -189,25 +323,44 @@ export class BrowserCloud {
             const saved = JSON.parse(remaining) as Session;
             if (!saved.user || this.key(saved.user.id) !== this.accountKey) {
               this.invalidateAccount();
-              throw new CloudError("account_changed", "The account changed while signing out. Reload before continuing.");
+              throw new CloudError(
+                "account_changed",
+                "The account changed while signing out. Reload before continuing.",
+              );
             }
             localStorage.removeItem(storageKey);
           }
-          if (localStorage.getItem(storageKey)) throw new CloudError("storage", "Could not clear your browser session. Please try again.");
+          if (localStorage.getItem(storageKey))
+            throw new CloudError(
+              "storage",
+              "Could not clear your browser session. Please try again.",
+            );
           this.accountKey = null;
           result = null;
-        } finally { this.signingOut = false; }
+        } finally {
+          this.signingOut = false;
+        }
         break;
       }
       case "planner_call": {
         const params = args.args as Record<string, unknown>;
-        result = await this.post("/rest/v1/rpc/planner_call", { p_action: args.action, p_args: params, p_timezone: args.timezone }, typeof params._accountKey === "string" ? params._accountKey : this.accountKey);
+        result = await this.post(
+          "/rest/v1/rpc/planner_call",
+          { p_action: args.action, p_args: params, p_timezone: args.timezone },
+          typeof params._accountKey === "string"
+            ? params._accountKey
+            : this.accountKey,
+        );
         break;
       }
       case "generate_weekly_review":
-        result = await this.post("/functions/v1/weekly-review", { timezone: args.timezone, ...(args.preview ? { preview: true } : {}) });
+        result = await this.post("/functions/v1/weekly-review", {
+          timezone: args.timezone,
+          ...(args.preview ? { preview: true } : {}),
+        });
         break;
-      default: throw new CloudError("validation", "Unsupported browser command.");
+      default:
+        throw new CloudError("validation", "Unsupported browser command.");
     }
     return result as T;
   }

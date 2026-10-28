@@ -62,7 +62,7 @@ test("the displayed privacy version matches its gate and accurately describes em
 });
 
 test("public support surfaces do not publish a personal email or email contact link", () => {
-  for (const path of ["../src/planner/weekly-review.ts", "../src/App.tsx", "../PRIVACY.md"]) {
+  for (const path of ["../src/reviews/WeeklyReview.tsx", "../src/App.tsx", "../PRIVACY.md"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.doesNotMatch(source, /mailto:|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, path);
   }
