@@ -2,8 +2,26 @@ import type { Dashboard } from "./api";
 import { DAY_MS } from "./time.ts";
 
 export type Completion = Dashboard["completions"][number];
-export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-export function calendarYear(year: number, today: string, completions: readonly Completion[], startMonth = 0) {
+export const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+export function calendarYear(
+  year: number,
+  today: string,
+  completions: readonly Completion[],
+  startMonth = 0,
+) {
   const start = new Date(Date.UTC(year, startMonth, 1));
   const end = new Date(Date.UTC(year + 1, startMonth, 0));
   const offset = start.getUTCDay();
@@ -24,7 +42,6 @@ export function calendarYear(year: number, today: string, completions: readonly 
   });
   return { weeks, days, total: days.reduce((sum, day) => sum + day.count, 0) };
 }
-
 
 export type CalendarYear = ReturnType<typeof calendarYear>;
 export type CalendarDay = CalendarYear["days"][number];

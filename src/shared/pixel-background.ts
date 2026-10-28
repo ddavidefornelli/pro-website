@@ -36,14 +36,21 @@ export function createPixelCells(): PixelCell[] {
     const y = Math.floor(index / PIXEL_COLUMNS);
     let strength = 0;
     for (const cluster of clusters) {
-      const distance = Math.hypot((x / PIXEL_COLUMNS - cluster.x) * 1.6, y / PIXEL_ROWS - cluster.y);
+      const distance = Math.hypot(
+        (x / PIXEL_COLUMNS - cluster.x) * 1.6,
+        y / PIXEL_ROWS - cluster.y,
+      );
       strength = Math.max(strength, 1 - distance / cluster.radius);
     }
     const chance = noise(x, y);
     // Light a substantial share of the whole artwork at each early level.
     // Clusters bias the reveal, rather than leaving nearly everything dark.
-    const tier = chance < 0.32 + strength * 0.30 ? 1
-      : chance < 0.68 + strength * 0.22 ? 2 : 3;
+    const tier =
+      chance < 0.32 + strength * 0.3
+        ? 1
+        : chance < 0.68 + strength * 0.22
+          ? 2
+          : 3;
     const duration = Math.round(60000 + noise(x + 173, y) * 80000);
     return {
       x: x * PIXEL_SIZE + 1,
@@ -64,13 +71,23 @@ function ease(value: number): number {
 
 // Quantized alpha lets the renderer skip cells whose visible brightness hasn't
 // changed. A very slow, eased rise/hold/decay avoids abrupt flashes or flicker.
-export function pixelAlpha(cell: PixelCell, elapsed: number, reducedMotion: boolean): number {
+export function pixelAlpha(
+  cell: PixelCell,
+  elapsed: number,
+  reducedMotion: boolean,
+): number {
   if (reducedMotion) return Math.round(cell.intensity * 255);
-  const reveal = ease(Math.min(1, Math.max(0, (elapsed - cell.delay) / PIXEL_REVEAL_DURATION)));
+  const reveal = ease(
+    Math.min(1, Math.max(0, (elapsed - cell.delay) / PIXEL_REVEAL_DURATION)),
+  );
   if (reveal === 0) return 0;
   const progress = ((elapsed + cell.phase) % cell.duration) / cell.duration;
-  const ramp = progress < 0.54 ? progress / 0.54
-    : progress < 0.65 ? 1 : (1 - progress) / 0.35;
+  const ramp =
+    progress < 0.54
+      ? progress / 0.54
+      : progress < 0.65
+        ? 1
+        : (1 - progress) / 0.35;
   const charge = 0.12 + 0.88 * ease(ramp);
   return Math.round(cell.intensity * charge * reveal * 255);
 }

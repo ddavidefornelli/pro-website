@@ -1,0 +1,3 @@
+# Preserve the pre-existing, in-progress Clerk transport verbatim.
+src/planner/clerk-cloud.ts
+src/planner/clerk-config.ts

@@ -37,9 +37,7 @@ for (const width of [1100, 390]) {
     await expect(page.locator("#app")).toHaveAttribute("data-view", "today");
     expect(backend.data.activeTask).toBeNull();
     await page.getByRole("navigation").getByRole("button", { name: "Overview" }).click();
-    await page.getByRole("button", { name: "Take a quick tour" }).click();
-    await popup.getByRole("button", { name: "Skip tour" }).click();
     await expect(page.locator("#app")).toHaveAttribute("data-view", "habits");
-    await expect(tour).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Take a quick tour" })).toHaveCount(0);
   });
 }

@@ -4,7 +4,7 @@ A mobile-first daily planner and focus timer, with email-code sign-in at `/` and
 
 **Launch status:** see [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the security review, test results and remaining hosted launch gates. Passing local tests is not production approval.
 
-The planner UI, timing/statistics helpers and durable local outbox were ported from the sibling Mac application in `../pro`. This is a working browser client for the **same Supabase backend**, not a local demo or a new database. Solid mounts the shell; the ported TypeScript planner owns its own DOM subtree. No Tauri runtime or sibling checkout is required to build this website.
+An idiomatic **SolidJS + TypeScript** application using reactive components, signals/stores and lifecycle-managed effects. The planner's timing/statistics rules and durable local outbox share the sibling Mac application's protocol in `../pro`. This is a browser client for the **same Supabase backend**, not a local demo or a new database. There is one Solid render root; screens do not manually build or replace DOM subtrees. No Tauri runtime or sibling checkout is required to build this website.
 
 ## Configure and run
 
@@ -30,7 +30,7 @@ After acknowledging the notice, enter your email, then enter the one-time code s
 
 - Today and Tomorrow: up to three equal tasks per day with editable titles and estimates; start any task in any order. No main-task designation, crowns, or completion animation. Tomorrow is available immediately. Desktop resource metadata is preserved, but the current web UI does not display or edit resources.
 - Focus: one active task, timestamp-based timer, pause/resume, written stop reasons, completion, and an in-memory-only notes scratchpad. Pause before switching views, just like the Mac app.
-- Overview: completion calendar, automatic scheduled weekly AI reviews, saved report history, and current-week previews. Previews are session-only and retain the server's cooldowns/quotas.
+- Overview: completion calendar, automatic scheduled weekly AI reviews and saved report history. Manual current-week previews remain Mac-only.
 - Profile: all-time/recent stats, streaks, AI preferences, sign-out and confirmed account deletion (soft-delete flag, followed by manual removal after 30 days).
 - Durable local snapshot/outbox: optimistic local saves, ordered automatic retries, idempotent requests, cross-device conflict handling and multi-tab coordination with Web Locks. A failed local save is not reported as success. Only definitively rejected changes can be discarded.
 - Phone-first layouts: touch-sized controls, 16px form inputs, stacked focus screen, bounded dialogs, safe-area padding, and natural vertical scrolling when the viewport or software keyboard is short.
@@ -40,7 +40,7 @@ After acknowledging the notice, enter your email, then enter the one-time code s
 - **Resources remain Mac-only in the current UI.** The desktop syncs labels, URLs and absolute paths, not file contents. Existing resource metadata is still in task API responses and the browser cache, but the website does not render resource controls or open arbitrary Mac paths. This implementation does not introduce uploads.
 - **Browser sessions are not Keychain sessions.** The Supabase browser client persists access/refresh tokens in a separate localStorage entry, handles token refresh, and coordinates auth across tabs. Tokens never enter the planner snapshot/outbox. This is JavaScript-accessible storage, not HttpOnly cookies; use a trusted device/browser profile. A server-mediated cookie session would be a separate architecture change.
 - Sign-out is local to this browser session, not global across the Mac app. It clears browser credentials, signs out other web tabs, and retains that account's pending planner changes. Remote token revocation is best-effort when offline; already-issued access tokens can remain valid until expiry.
-- Sign-in/session verification requires internet on startup, as in the Mac app. After loading the account, cached planner actions work through connection losses. The cache is not a full account-history archive. Clearing site data can permanently lose unsynced work.
+- Sign-in/session verification requires Auth connectivity on startup. After Auth verifies the immutable identity, a planner-only network outage can restore that account's existing cache; unauthorized responses and confirmed deletion never unlock it. Cached planner actions then work through connection losses. This also means a device disconnected from planner services cannot learn about a remote deletion until it reconnects. The cache is not a full account-history archive. Clearing site data can permanently lose unsynced work.
 - The timer uses timestamps, not interval counts, so background throttling/reload does not reset elapsed focus time. Review scheduling catches up on focus/visibility/next launch; no browser task runs after all tabs are closed.
 - HTTPS and a current browser with Web Locks support are required (localhost is allowed for development). Unencrypted site storage is shared by tabs on this origin but isolated by Supabase project and immutable user ID.
 
@@ -169,7 +169,7 @@ npm run test:unit
 npm run test:e2e
 ```
 
-Unit tests cover the durable queue, retry identities, ambiguous failures, storage failures, account isolation, timer projection, public-key validation, safe resource URLs, privacy records and HTTP error classification. Playwright runs Chromium and WebKit, including real touch/mobile contexts, email-code sign-in/invalid codes, refresh/restoration, task/focus workflows, previews, conflicts, multi-tab sign-out and phone/landscape layouts.
+Unit tests cover the durable queue, retry identities, ambiguous failures, storage failures, account isolation, timer projection, public-key validation, privacy records, HTTP error classification, profile statistics, onboarding and review timing. `test:reactivity` additionally runs real Solid browser reactivity under Node's `browser` export condition to check keyed reconciliation, memory-only notes, preference races, late responses and lifecycle cleanup. The active UI never renders Mac resource URLs; browser security tests verify that metadata stays inert. Playwright runs Chromium and WebKit, including real touch/mobile contexts, email-code sign-in/invalid codes, refresh/restoration, task/focus workflows, previews, conflicts, multi-tab sign-out and phone/landscape layouts.
 
 Browser tests build production output into ignored `.playwright-dist/` (never overwriting production `dist/`) and exercise the real Supabase SDK, browser storage/Web Locks and HTTP transport against **intercepted Auth/RPC/AI fixtures**. They include stored-HTML injection, tampered/rejected session identities, browser-back after sign-out and scratchpad/token separation. Security regressions cover GET/HEAD headers on document aliases and query strings, actual same-origin frame rejection and modified stylesheet SRI, plus unit tests of the packaged deployment's headers/routes, public-file tracker scan and stale-output cleanup. Vite preview installs the production security headers, and explicit CSP/SRI probes verify blocked inline code/styles, same-origin/third-party script injection, modified bundles, frames, workers, native form submissions, base overrides and connections outside the exact API endpoint allowlist. The safe-rendering tests also assert that no injected HTML nodes exist, so CSP cannot conceal an unsafe-rendering regression. They do not send real email, connect to a hosted database, call paid AI, or prove concurrent hosted database behavior. Test-only public configuration is set by `playwright.config.ts`, never production code. Mobile screenshots are written to the ignored `test-results/` directory. Before release, verify real email delivery and code verification, Mac↔web sync, timer conflicts, real review generation and sign-out against the actual hosted project.
 
@@ -198,19 +198,51 @@ Results distinguish **PASS**, **WARN** (review required), **FAIL** (confirmed mi
 
 The checker does not prove authenticated account isolation or backend deployment parity, and recognized-tracker scans are not exhaustive browser-network audits. Use the read-only `supabase/security-audit.sql` in the hosted SQL Editor and complete the manual gates in `PRODUCTION_READINESS.md`. Do not reset or seed the shared production database.
 
-## Source map and parity maintenance
+## Architecture and maintenance
 
 ```text
-src/App.tsx                  Solid shell, persistent Mac download, planner mount
-src/planner/auth.ts           Browser signup/sign-in and notice acknowledgement
-src/planner/browser.ts        Supabase browser auth + bounded authenticated HTTP
-src/planner/api.ts            Typed planner API and persistent queue integration
-src/planner/main.ts           Ported planner/focus UI; desktop resource data preserved
-src/planner/local-queue.ts    Ported durable outbox + browser-tab refresh handling
-src/planner/weekly-review.ts  Saved weekly reports and review preferences
-src/planner/styles.css       Original Mac UI styling
-src/styles.css               Mobile-first web layout and shell overrides
-src/shared/task-timing.ts    Shared timing comparison logic copied from the Mac app
+src/
+  App.tsx                       Session bootstrap, error boundary and download route
+  index.tsx                     The single Solid render root and private analytics URLs
+  auth/SignIn.tsx               Email-code flow and notice acknowledgement UI
+  components/                   Shared native dialog, privacy policy, header and canvas
+  planner/
+    Planner.tsx                 Feature composition and navigation/onboarding state
+    create-planner.ts           Reactive dashboard, mutations, clock and lifecycle
+    components/                 Plans, task editor, estimate dial, focus, calendar and tour
+    api.ts                      Transport-independent planner client and durable queue
+    browser.ts                  Supabase auth and bounded authenticated HTTP transport
+    local-queue.ts              Versioned snapshots, ordered retries and cross-tab locks
+    types.ts                    Shared API/domain contracts; no UI dependencies
+    constants.ts                UI bounds, estimate ranges, views and polling intervals
+    task-model.ts               Pure task-completion and tracked-time rules
+    onboarding.ts               Pure, account-scoped eligibility/storage key rules
+    config.ts                   Public-only backend configuration validation
+    privacy-state.ts            Versioned, device-local legal acknowledgement
+  profile/                      Profile components and pure calendar-based statistics
+  reviews/                      Independent AI state, preferences, reports and countdown
+  shared/                       Pure cross-runtime timing, pixel and deployment constants
+  styles/                       Base component styles and mobile-first web layout
 ```
 
-The ported source is vendored here so deployment is independent of `../pro`. When the desktop changes, review/merge its UI, timing, queue and RPC contract changes deliberately; preserve browser auth, file restrictions, mobile overrides and multi-tab handling. There is no automatic cross-repository source sync.
+### Code quality
+
+```sh
+npm run check          # Strict typecheck (including server/API), ESLint + Solid rules, formatting
+npm run format         # Format maintained frontend source
+npm run test:unit      # Domain/queue/security tests and Solid lifecycle tests
+npm run test:e2e       # Production-artifact Chromium + WebKit workflows
+```
+
+CI runs the same quality gates before testing and packaging. Supabase CLI, PGlite, formatting, linting and server-build tools are development dependencies. Dependencies referenced by the existing in-progress Clerk frontend/backend code are explicitly declared, so a clean `npm ci` does not rely on extraneous local packages. **This refactor does not switch the active Supabase transport to Clerk or deploy its bridge migration.** Existing Clerk/backend source is preserved; its frontend files are excluded from bulk formatting.
+
+### Component and data boundaries
+
+- Render with JSX and `Show`/`For`/`Switch`; use effects only for external effects, subscriptions and measurements. No manual `replaceChildren` rendering, nested render roots, unsafe HTML sinks or global DOM-based state synchronization.
+- `createPlanner` owns one session's reactive UI state. Store reconciliation preserves task identities, drafts and focused controls during background refresh. Components own local form drafts; focus notes remain memory-only and reset when the active task changes.
+- Controllers, dialogs, the canvas and navigation/tour measurements register cleanup with their Solid owner. Session disposal also stops the outbox, auth refresh and browser subscriptions; late startup/read responses cannot initialize a disposed client.
+- `PlanningClient` owns persistence and transport. Persisted snapshot versions, storage keys, idempotency identities and the shared RPC contract are deliberately unchanged. Legacy queue projection branches must remain while saved commands or supported Mac clients can use them.
+- Weekly AI state is independent of task mutation state. Preference writes invalidate older reads, and pending-review polling stops when its screen is hidden or its owner is disposed.
+- Backend/schema cleanup must consider **all** clients. See [the database review](docs/database-review.md): no table or column was safe to drop, and no hosted schema or user data was changed.
+
+When the desktop changes, deliberately review its timing, queue and RPC contract changes while preserving browser auth, file restrictions, mobile behavior and multi-tab handling. There is no automatic cross-repository source sync. Database deployment still requires the shared backend checkout; website deployment does not.
