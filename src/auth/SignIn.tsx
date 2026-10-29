@@ -18,7 +18,7 @@ interface SignInProps {
   onAuthenticated: (account: Account) => void;
 }
 
-/** Email-code sign-in; no SDK or account access before durable notice acceptance. */
+/** No SDK or account access before durable notice acceptance. */
 export function SignIn(props: SignInProps) {
   const [acknowledged, setAcknowledged] = createSignal(
     hasPrivacyAcknowledgement(localStorage),
@@ -32,6 +32,18 @@ export function SignIn(props: SignInProps) {
   let emailInput!: HTMLInputElement;
   let codeInput!: HTMLInputElement;
 
+  function acceptNotice(): void {
+    if (acknowledged()) return;
+    try {
+      acknowledgePrivacy(localStorage);
+    } catch {
+      throw new Error(
+        "Could not save your terms acceptance. Allow browser storage and try again. No sign-in request was sent.",
+      );
+    }
+    setAcknowledged(true);
+  }
+
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     if (busy() || props.configurationError) return;
@@ -40,16 +52,7 @@ export function SignIn(props: SignInProps) {
       setError("");
     });
     try {
-      if (!acknowledged()) {
-        try {
-          acknowledgePrivacy(localStorage);
-        } catch {
-          throw new Error(
-            "Could not save your terms acceptance. Allow browser storage and try again. No sign-in request was sent.",
-          );
-        }
-        setAcknowledged(true);
-      }
+      acceptNotice();
       if (!sentTo()) {
         const address = email().trim();
         await props.client.sendCode(address);
@@ -116,6 +119,10 @@ export function SignIn(props: SignInProps) {
             onInput={(event) => setEmail(event.currentTarget.value)}
           />
         </label>
+        <p hidden={!sentTo()} class="muted">
+          Check your inbox for your sign-in code. Enter it below to sign in and
+          save your tasks.
+        </p>
         <label hidden={!sentTo()}>
           Email code
           <div class="email-code-boxes">
@@ -177,10 +184,10 @@ export function SignIn(props: SignInProps) {
         <button
           class="auth-submit"
           type="submit"
-          aria-label={sentTo() ? "Verify code" : "Send code"}
+          aria-label={sentTo() ? "Verify code" : "Email me a sign-in code"}
           disabled={busy() || !!props.configurationError}
         >
-          {sentTo() ? "Verify code" : "I WANT TO WIN"}
+          {sentTo() ? "Verify code" : "Email me a sign-in code"}
         </button>
         <Show when={sentTo()}>
           <button

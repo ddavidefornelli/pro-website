@@ -54,7 +54,7 @@ function alignDate(data: Dashboard, at: number, timezone: string): Dashboard {
 }
 
 /** Mutates an owned snapshot; public callers clone once before replaying commands. */
-function applyCommand(
+export function applyCommand(
   data: Dashboard,
   command: QueuedAction,
   result?: Task,

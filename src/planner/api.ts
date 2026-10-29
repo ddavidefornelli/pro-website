@@ -1,4 +1,5 @@
 import { BrowserCloud } from "./browser.ts";
+import { GuestStore } from "./guest.ts";
 import { LocalQueue, QUEUE_STORAGE_VERSION } from "./local-queue.ts";
 
 import type { AuthStatus, Dashboard, Task, WeeklyOverview } from "./types";
@@ -24,7 +25,9 @@ interface CloudTransport {
 export class PlanningClient {
   private readonly cloud: CloudTransport;
   private disposed = false;
-  constructor(cloud: CloudTransport = new BrowserCloud()) {
+  private readonly guest: GuestStore | null;
+  constructor(cloud: CloudTransport = new BrowserCloud(), guest = false) {
+    this.guest = guest ? new GuestStore() : null;
     this.cloud = cloud;
     this.cloud.onAccountChange = () => {
       void this.queue?.stop();
@@ -190,6 +193,13 @@ export class PlanningClient {
   ): Promise<T> {
     if (this.disposed)
       return Promise.reject(new Error("The planner client is closed."));
+    if (this.guest) {
+      if (action === "dashboard")
+        return Promise.resolve(this.guest.dashboard() as T);
+      if (["weekly_overview", "set_weekly_ai_enabled"].includes(action))
+        return Promise.reject(new Error("Sign in to enable weekly analysis."));
+      return this.guest.mutate(action, args, this.timezone) as Promise<T>;
+    }
     if (
       !["dashboard", "weekly_overview", "set_weekly_ai_enabled"].includes(
         action,
@@ -245,6 +255,30 @@ export class PlanningClient {
   }
   async authStatus(): Promise<AuthStatus> {
     return this.loadAccount(await this.request<AuthStatus>("auth_status"));
+  }
+  async importGuestTasks(): Promise<void> {
+    const guest = new GuestStore();
+    if (!guest.hasTasks()) return;
+    if (!this.accountKey)
+      throw new Error("Sign in before syncing guest tasks.");
+    await this.sync();
+    if (this.pendingCount)
+      throw new Error(
+        "Finish syncing existing account changes before importing guest tasks.",
+      );
+    await guest.transfer(this.accountKey, (payload) =>
+      this.request<{ imported: boolean }>("import_guest", {
+        payload,
+        accountKey: this.accountKey,
+      }),
+    );
+    await this.sync();
+  }
+  async signInWithGoogle(): Promise<void> {
+    await this.request("sign_in_with_google");
+  }
+  async sendMagicLink(email: string): Promise<void> {
+    await this.request("send_magic_link", { email });
   }
   async sendCode(email: string): Promise<void> {
     await this.request("send_code", { email });
