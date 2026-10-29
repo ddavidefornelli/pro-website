@@ -6,13 +6,16 @@ import { PRODUCTION_ORIGINS } from "../src/shared/site.ts";
 // other Edge Functions, Realtime or another Supabase tenant.
 export const API_PATHS = [
   "/auth/v1/otp", "/auth/v1/verify", "/auth/v1/user", "/auth/v1/token", "/auth/v1/logout",
-  "/rest/v1/rpc/planner_call", "/functions/v1/weekly-review",
+  "/rest/v1/rpc/planner_call", "/rest/v1/rpc/planner_import_guest", "/functions/v1/weekly-review",
 ] as const;
 
-// Narrow exception for Vercel's managed (non-SRI-pinned) analytics script.
+// Exceptions for managed (non-SRI-pinned) analytics scripts.
 export const ANALYTICS_ORIGINS = PRODUCTION_ORIGINS;
 export const ANALYTICS_SCRIPTS = ANALYTICS_ORIGINS.map((origin) => `${origin}/_vercel/insights/script.js`);
 export const ANALYTICS_CONNECTIONS = ANALYTICS_ORIGINS.map((origin) => `${origin}/_vercel/insights/`);
+export const CONTENTSQUARE_SCRIPTS = ["https://*.contentsquare.net", "https://app.contentsquare.com"];
+export const CONTENTSQUARE_CONNECTIONS = ["https://*.contentsquare.net", "https://*.contentsquare.com"];
+export const CONTENTSQUARE_IMAGES = ["https://*.contentsquare.net"];
 
 export function integrity(content: string | Uint8Array): string {
   return `sha384-${createHash("sha384").update(content).digest("base64")}`;
@@ -28,13 +31,13 @@ export function securityHeaders(apiOrigin: string, scriptHashes: string[]): Reco
   }
   const policy = [
     "default-src 'none'",
-    // App scripts remain hash-pinned; only the managed analytics path is exempt.
-    `script-src ${[...new Set(scriptHashes)].map((hash) => `'${hash}'`).join(" ")} ${ANALYTICS_SCRIPTS.join(" ")}`,
+    // App scripts remain hash-pinned; managed analytics sources are explicit exceptions.
+    `script-src ${[...new Set(scriptHashes)].map((hash) => `'${hash}'`).join(" ")} ${[...ANALYTICS_SCRIPTS, ...CONTENTSQUARE_SCRIPTS].join(" ")}`,
     "script-src-attr 'none'",
     "style-src 'self'",
     "style-src-attr 'none'",
-    `connect-src ${[...API_PATHS.map((path) => `${apiOrigin}${path}`), ...ANALYTICS_CONNECTIONS].join(" ")}`,
-    "img-src 'self'",
+    `connect-src ${[...API_PATHS.map((path) => `${apiOrigin}${path}`), ...ANALYTICS_CONNECTIONS, ...CONTENTSQUARE_CONNECTIONS].join(" ")}`,
+    `img-src 'self' ${CONTENTSQUARE_IMAGES.join(" ")}`,
     "font-src 'self'",
     "manifest-src 'none'",
     "media-src 'none'",

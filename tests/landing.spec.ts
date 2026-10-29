@@ -1,5 +1,5 @@
 import { test, expect, AUTH_KEY, session } from "./helpers/browser";
-import { PRIVACY_ACKNOWLEDGEMENT_KEY } from "../src/planner/privacy-state";
+import { PRIVACY_POLICY_VERSION, PRIVACY_ACKNOWLEDGEMENT_KEY } from "../src/planner/privacy-state";
 
 test("home is signup, with an unchecked notice and no site header", async ({ page, backend }) => {
   await page.goto("/");
@@ -12,6 +12,26 @@ test("home is signup, with an unchecked notice and no site header", async ({ pag
   await expect(page.getByRole("link", { name: "Install for Mac" })).toHaveCount(0);
   expect(backend.requests).toEqual([]);
   expect(await page.locator("script[src*='googletagmanager'],script[src*='goatcounter'],script[src*='vercel-scripts']").count()).toBe(0);
+});
+
+test("Google sign-in requires notice acceptance but not an email address", async ({ page, context, backend }) => {
+  let authorization: URL | undefined;
+  await context.route("**/auth/v1/authorize?**", async (route) => {
+    authorization = new URL(route.request().url());
+    await route.fulfill({ contentType: "text/html", body: "Google authorization fixture" });
+  });
+  await page.goto("/");
+  const google = page.getByRole("button", { name: "Sign in with Google", exact: true });
+  await google.click();
+  expect(authorization).toBeUndefined();
+  expect(backend.requests).toHaveLength(0);
+  await page.getByRole("checkbox").check();
+  await google.click();
+  await expect.poll(() => authorization?.searchParams.get("provider")).toBe("google");
+  expect(authorization!.searchParams.get("code_challenge_method")).toBe("s256");
+  expect(authorization!.searchParams.get("code_challenge")).toBeTruthy();
+  expect(authorization!.searchParams.get("redirect_to")).toBe("http://127.0.0.1:4173/?oauth=google");
+  expect(backend.requests.some((request) => request.path === "/auth/v1/otp")).toBe(false);
 });
 
 test("email-code sign-in handles invalid codes then restores the session without another email", async ({ page, backend }) => {
@@ -47,6 +67,30 @@ test("email-code sign-in handles invalid codes then restores the session without
   expect(saved).not.toContain("12345678"); // One-time codes are not persisted.
   const plannerRequests = backend.requests.filter((request) => request.path.includes("/rpc/") || request.path.includes("/functions/"));
   expect(JSON.stringify(plannerRequests.map((request) => request.body))).not.toContain("12345678");
+});
+
+test("Google callback exchanges the code and removes it from the URL", async ({ page, backend }) => {
+  await page.addInitScript(({ key, version }) => {
+    localStorage.setItem(key, JSON.stringify({ version, acknowledgedAt: new Date().toISOString() }));
+  }, { key: PRIVACY_ACKNOWLEDGEMENT_KEY, version: PRIVACY_POLICY_VERSION });
+  await page.addInitScript((authKey) => {
+    localStorage.setItem(`${authKey}-code-verifier`, JSON.stringify("fixture-pkce-verifier"));
+  }, AUTH_KEY);
+  await page.goto("/?oauth=google&code=fixture-oauth-code");
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+  await expect(page).toHaveURL("http://127.0.0.1:4173/");
+  expect(backend.requests.some((request) => request.path === "/auth/v1/token?grant_type=pkce" && request.body.auth_code === "fixture-oauth-code")).toBe(true);
+  expect(backend.requests.some((request) => request.path === "/auth/v1/user")).toBe(true);
+});
+
+test("Google cancellation clears callback parameters and shows a safe error", async ({ page, backend }) => {
+  await page.addInitScript(({ key, version }) => {
+    localStorage.setItem(key, JSON.stringify({ version, acknowledgedAt: new Date().toISOString() }));
+  }, { key: PRIVACY_ACKNOWLEDGEMENT_KEY, version: PRIVACY_POLICY_VERSION });
+  await page.goto("/?oauth=google&error=access_denied&error_description=private-diagnostic");
+  await expect(page.getByRole("alert")).toContainText("Google sign-in was cancelled");
+  await expect(page).toHaveURL("http://127.0.0.1:4173/");
+  expect(backend.requests).toHaveLength(0);
 });
 
 test("privacy storage failure sends no account request and does not claim signup succeeded", async ({ page, backend }) => {

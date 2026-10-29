@@ -138,6 +138,7 @@ export class BrowserCloud {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
+        flowType: "pkce",
       },
       global: { fetch: apiFetch },
     });
@@ -196,6 +197,39 @@ export class BrowserCloud {
 
   private async status(): Promise<AuthStatus> {
     const sdk = this.sdk();
+    const callback = new URL(window.location.href);
+    if (
+      ["google", "email"].includes(callback.searchParams.get("oauth") ?? "")
+    ) {
+      const code = callback.searchParams.get("code");
+      const failed = callback.searchParams.has("error");
+      for (const key of [
+        "oauth",
+        "code",
+        "error",
+        "error_code",
+        "error_description",
+      ]) {
+        callback.searchParams.delete(key);
+      }
+      window.history.replaceState(
+        null,
+        "",
+        callback.pathname + callback.search + callback.hash,
+      );
+      if (failed || !code) {
+        throw new CloudError(
+          "auth",
+          "Sign-in was cancelled or could not be completed. Please try again.",
+        );
+      }
+      const { error } = await sdk.auth.exchangeCodeForSession(code);
+      if (error)
+        throw new CloudError(
+          "auth",
+          "Sign-in could not be completed. Try again in the same browser where you started sign-in.",
+        );
+    }
     const { data, error } = await sdk.auth.getSession();
     if (error) throw authError(error);
     if (!data.session)
@@ -280,6 +314,28 @@ export class BrowserCloud {
       case "auth_status":
         result = await this.status();
         break;
+      case "sign_in_with_google": {
+        const redirectTo = new URL("/", window.location.origin);
+        redirectTo.searchParams.set("oauth", "google");
+        const { error } = await this.sdk().auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: redirectTo.href },
+        });
+        if (error) throw authError(error);
+        result = null;
+        break;
+      }
+      case "send_magic_link": {
+        const redirectTo = new URL("/", window.location.origin);
+        redirectTo.searchParams.set("oauth", "email");
+        const { error } = await this.sdk().auth.signInWithOtp({
+          email: String(args.email),
+          options: { emailRedirectTo: redirectTo.href },
+        });
+        if (error) throw authError(error);
+        result = null;
+        break;
+      }
       case "send_code": {
         const { error } = await this.sdk().auth.signInWithOtp({
           email: String(args.email),
@@ -342,6 +398,13 @@ export class BrowserCloud {
         }
         break;
       }
+      case "import_guest":
+        result = await this.post(
+          "/rest/v1/rpc/planner_import_guest",
+          { p_payload: args.payload },
+          String(args.accountKey),
+        );
+        break;
       case "planner_call": {
         const params = args.args as Record<string, unknown>;
         result = await this.post(

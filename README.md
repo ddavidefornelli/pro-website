@@ -1,6 +1,6 @@
 # prune — web app
 
-A mobile-first daily planner and focus timer, with email-code sign-in at `/` and an **Install for Mac** button in the top-right corner. `/download` still starts the Mac download.
+A mobile-first daily planner and focus timer, with immediate guest access and optional account sign-in at `/` and an **Install for Mac** button in the top-right corner. `/download` still starts the Mac download.
 
 **Launch status:** see [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the security review, test results and remaining hosted launch gates. Passing local tests is not production approval.
 
@@ -24,7 +24,11 @@ VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_LEGACY_ANON_KEY
 
 These are public browser settings, embedded **at build time**. A modern `sb_publishable_…` key or legacy anon key is accepted. Never use a service-role key, `sb_secret_…` key, OpenAI key or other privileged credential. Partial/unsafe configuration fails Vite startup/build; production builds also fail when configuration is entirely missing. An unconfigured development checkout displays a setup error and cannot falsely report successful signup. Do not put real keys into tests.
 
-After acknowledging the notice, enter your email, then enter the one-time code sent to your inbox. No password is needed. New accounts are created through Supabase email authentication. A returning session is restored only after this browser has acknowledged the current privacy notice.
+Visitors can plan immediately without an account. Guest tasks and stop reasons are saved only in this browser under `prune:guest:v1`; clearing site data loses them. Guest mode does not send planner data to Supabase or OpenAI. Choose **Save & sync across devices** to accept the notice and sign in using Google or an email magic link (email-code fallback remains supported). Open magic links in the browser where guest planning started. A returning verified session is restored only after this browser has acknowledged the current privacy notice.
+
+Before deploying, apply `supabase/migrations/20261028000100_guest_import.sql` after the previous migrations. Guest import is an authenticated, atomic RPC with a durable import receipt: a failed/ambiguous response retains the guest journal, and retries use the same import identity and payload. Imports do not overwrite existing account tasks. If a planning day has no free slots or the account already has an active task, the import fails without partial writes; the guest copy remains on this device. Once transfer starts, guest edits are frozen and the transfer is bound to that account until completion.
+
+For magic links, configure the Supabase email template to include `{{ .ConfirmationURL }}` (optionally also `{{ .Token }}` for the code fallback). Allow the website origin with `/?oauth=email` in Auth redirect URLs, alongside `/?oauth=google`. Email delivery and Google OAuth still require the existing provider configuration. A missing backend import migration must be fixed before Save & sync can complete.
 
 ## Features
 
@@ -76,6 +80,18 @@ Review this list and permanently delete the corresponding **Auth users** via Sup
 ### Email-code authentication
 
 Enable Supabase email Auth and configure SMTP for production delivery. Email templates (including Magic Link and Confirm Signup) must display `{{ .Token }}` so users can enter the code on the website, rather than follow a magic link. Keep this aligned with the Mac app’s existing email-code configuration. Auth rate limits, code expiry and email delivery still need hosted smoke tests; do not enable a mandatory CAPTCHA until a matching client flow is added.
+
+### Google sign-in
+
+The landing page also offers **Sign in with Google**, after the same Terms & Privacy acknowledgement. It uses the active Supabase transport (not the unfinished Clerk transport), with a PKCE authorization-code exchange. Returning users pass the existing server-side Auth identity check before planner caches are opened.
+
+Before using it on a hosted project:
+
+1. Create a Google OAuth **Web application** client and configure its consent screen (add test users if the Google app is in testing).
+2. Add the callback URL displayed by Supabase (usually `https://<project-ref>.supabase.co/auth/v1/callback`) to Google's authorized redirect URIs.
+3. Enable **Google** under Supabase Authentication → Providers and enter the Google client ID and client secret there. Never put the secret in Vite variables or source code.
+4. In Supabase Authentication → URL Configuration, allow the exact website return URL `https://www.prune.win/?oauth=google` (and equivalent URLs for any supported alternate or local origins). Keep the Site URL set to the canonical website origin.
+5. Smoke-test new and returning Google users, cancellation, sign-out and existing-account linking against the hosted project. Automated tests use fixtures, not live Google credentials.
 
 ### Weekly AI CORS
 

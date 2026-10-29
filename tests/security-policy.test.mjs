@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { ANALYTICS_SCRIPTS, ANALYTICS_CONNECTIONS, API_PATHS, hardenHtml, integrity, securityHeaders } from "../scripts/security-policy.ts";
+import { ANALYTICS_SCRIPTS, ANALYTICS_CONNECTIONS, CONTENTSQUARE_SCRIPTS, CONTENTSQUARE_CONNECTIONS, CONTENTSQUARE_IMAGES, API_PATHS, hardenHtml, integrity, securityHeaders } from "../scripts/security-policy.ts";
 import { productionCsp } from "../scripts/csp-plugin.ts";
 import { buildVercel } from "../scripts/build-vercel.ts";
 
@@ -18,16 +18,21 @@ const directives = (policy) => Object.fromEntries(policy.split(";").map((part) =
   return [name, sources.join(" ")];
 }));
 
-test("CSP and SRI use hashes of exact emitted bytes, with only a narrow managed analytics exception", () => {
+test("CSP and SRI use hashes of exact emitted bytes, with explicit managed analytics exceptions", () => {
   const built = hardenHtml(entry, assets, origin);
   const expected = `sha384-${createHash("sha384").update(script).digest("base64")}`;
   const csp = directives(built.headers["Content-Security-Policy"]);
-  assert.equal(csp["script-src"], `'${expected}' ${ANALYTICS_SCRIPTS.join(" ")}`);
+  assert.equal(csp["script-src"], `'${expected}' ${[...ANALYTICS_SCRIPTS, ...CONTENTSQUARE_SCRIPTS].join(" ")}`);
   assert.ok(built.html.includes(`<script integrity="${expected}"`));
   assert.ok(built.html.includes(`<link integrity="${integrity(css)}"`));
   assert.ok(built.html.indexOf("http-equiv=") < built.html.indexOf("<script"));
-  assert.equal(csp["connect-src"], [...API_PATHS.map((path) => `${origin}${path}`), ...ANALYTICS_CONNECTIONS].join(" "));
-  assert.ok(!built.headers["Content-Security-Policy"].includes("*"));
+  assert.equal(csp["connect-src"], [...API_PATHS.map((path) => `${origin}${path}`), ...ANALYTICS_CONNECTIONS, ...CONTENTSQUARE_CONNECTIONS].join(" "));
+  assert.equal(csp["img-src"], `'self' ${CONTENTSQUARE_IMAGES.join(" ")}`);
+  for (const sources of Object.values(csp)) {
+    for (const source of sources.split(" ")) {
+      if (source.includes("*")) assert.match(source, /^https:\/\/\*\.contentsquare\.(net|com)$/);
+    }
+  }
   assert.ok(!built.headers["Content-Security-Policy"].includes("unsafe-"));
   assert.equal(csp["style-src"], "'self'");
   assert.equal(csp["font-src"], "'self'");

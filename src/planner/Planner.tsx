@@ -23,13 +23,20 @@ import { createPlanner } from "./create-planner";
 import { shouldOfferOnboarding } from "./onboarding";
 import type { Account } from "./types";
 
-export function Planner(props: { client: PlanningClient; account: Account }) {
+export function Planner(props: {
+  client: PlanningClient;
+  account: Account;
+  guest?: boolean;
+  onSaveAndSync?: () => void;
+}) {
   let root!: HTMLDivElement;
   const client = untrack(() => props.client);
   const planner = createPlanner(client);
   const review = createWeeklyReview(
     client,
-    () => planner.view() === "habits" || planner.view() === "profile",
+    () =>
+      !props.guest &&
+      (planner.view() === "habits" || planner.view() === "profile"),
   );
   const [onboarding, setOnboarding] = createSignal(false);
   const [tour, setTour] = createSignal(false);
@@ -126,33 +133,67 @@ export function Planner(props: { client: PlanningClient; account: Account }) {
                   email={props.account.email}
                   planner={planner}
                   review={review}
+                  guest={props.guest}
                 />
               </Match>
               <Match when={planner.view() === "focus"}>
                 <FocusView planner={planner} client={props.client} />
               </Match>
               <Match when={planner.view() === "habits"}>
-                <div class="overview-actions">
-                  <button
-                    type="button"
-                    class="profile-button"
-                    aria-label="Profile"
-                    aria-controls="planner-content"
-                    title="Profile"
-                    disabled={planner.busy() || planner.focusLocked()}
-                    onClick={() => planner.visit("profile")}
+                <div class="overview-screen">
+                  <div
+                    class="overview-content"
+                    inert={props.guest ? true : undefined}
                   >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <circle cx="12" cy="8" r="4" />
-                      <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
-                    </svg>
-                  </button>
+                    <div class="overview-actions">
+                      <button
+                        type="button"
+                        class="profile-button"
+                        aria-label="Profile"
+                        aria-controls="planner-content"
+                        title="Profile"
+                        disabled={planner.busy() || planner.focusLocked()}
+                        onClick={() => planner.visit("profile")}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="12" cy="8" r="4" />
+                          <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <ActivityCalendar
+                      today={planner.data()!.today}
+                      completions={planner.data()!.completions}
+                    />
+                    <Show when={!props.guest}>
+                      <WeeklyReview review={review} now={planner.clock()} />
+                    </Show>
+                  </div>
+                  <Show when={props.guest}>
+                    <section
+                      class="overview-signin-overlay"
+                      aria-labelledby="overview-signin-title"
+                    >
+                      <div class="overview-signin-prompt">
+                        <h2 id="overview-signin-title">
+                          AI weekly analysis is available only when you sign in.
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() => props.onSaveAndSync?.()}
+                        >
+                          Sign in
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => planner.visit("profile")}
+                        >
+                          Profile
+                        </button>
+                      </div>
+                    </section>
+                  </Show>
                 </div>
-                <ActivityCalendar
-                  today={planner.data()!.today}
-                  completions={planner.data()!.completions}
-                />
-                <WeeklyReview review={review} now={planner.clock()} />
               </Match>
               <Match
                 when={
