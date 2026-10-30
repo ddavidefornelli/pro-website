@@ -39,9 +39,7 @@ export function TaskTitle(props: TaskTitleProps) {
           when={editing()}
           fallback={
             <button
-              ref={(element) => {
-                editButton = element;
-              }}
+              ref={(element) => (editButton = element)}
               type="button"
               disabled={props.disabled}
               title={`${props.task.outcome} — click to edit`}

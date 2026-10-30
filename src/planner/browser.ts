@@ -4,82 +4,13 @@ import {
   type Session,
   type SupabaseClient,
 } from "@supabase/supabase-js";
-import type { AuthStatus } from "./api";
+import { SUPABASE_ROUTES } from "../shared/api-routes.ts";
+import { apiFetch } from "./api-fetch.ts";
+import type { CloudTransport } from "./commands.ts";
+import type { AuthStatus } from "./types.ts";
 import { webConfig, type PublicConfig } from "./config.ts";
 import { CloudError, httpError } from "./http-error.ts";
 import { hasPrivacyAcknowledgement } from "./privacy-state.ts";
-
-const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
-
-/** Bounded requests; no cookies or referrer are sent to the external API. */
-export async function apiFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-  timeoutMs?: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  const url = String(input);
-  const timeout = setTimeout(
-    abort,
-    timeoutMs ??
-      (url.includes("/functions/")
-        ? 110_000
-        : url.includes("/logout")
-          ? 5000
-          : 20_000),
-  );
-  if (init?.signal?.aborted) abort();
-  init?.signal?.addEventListener("abort", abort, { once: true });
-  try {
-    const response = await fetch(input, {
-      ...init,
-      signal: controller.signal,
-      credentials: "omit",
-      cache: "no-store",
-      redirect: "error",
-      referrerPolicy: "no-referrer",
-    });
-    const reader = response.body?.getReader();
-    if (!reader) return response;
-    const chunks: Uint8Array[] = [];
-    let length = 0;
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        length += value.byteLength;
-        if (length > MAX_RESPONSE_BYTES) {
-          await reader.cancel();
-          throw new CloudError(
-            "size",
-            "The server response is too large. Please contact support.",
-          );
-        }
-        chunks.push(value);
-      }
-    } finally {
-      reader.releaseLock();
-    }
-    const bytes = new Uint8Array(length);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.length;
-    }
-    const headers = new Headers(response.headers);
-    headers.delete("Content-Encoding");
-    headers.delete("Content-Length");
-    return new Response(bytes, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  } finally {
-    clearTimeout(timeout);
-    init?.signal?.removeEventListener("abort", abort);
-  }
-}
 
 function authError(error: AuthError): CloudError {
   if (error.status === 429)
@@ -108,7 +39,7 @@ function authError(error: AuthError): CloudError {
  * Supabase manages refresh rotation and cross-tab auth locking. Browser sessions
  * are stored separately from the planner outbox, never in planner snapshots.
  */
-export class BrowserCloud {
+export class BrowserCloud implements CloudTransport {
   private client: SupabaseClient | null = null;
   private config: PublicConfig | null = null;
   private accountKey: string | null = null;
@@ -198,6 +129,8 @@ export class BrowserCloud {
   private async status(): Promise<AuthStatus> {
     const sdk = this.sdk();
     const callback = new URL(window.location.href);
+    // Complete already-issued OAuth/email callbacks, even though the current UI
+    // starts sign-in only with an email code.
     if (
       ["google", "email"].includes(callback.searchParams.get("oauth") ?? "")
     ) {
@@ -314,28 +247,6 @@ export class BrowserCloud {
       case "auth_status":
         result = await this.status();
         break;
-      case "sign_in_with_google": {
-        const redirectTo = new URL("/", window.location.origin);
-        redirectTo.searchParams.set("oauth", "google");
-        const { error } = await this.sdk().auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: redirectTo.href },
-        });
-        if (error) throw authError(error);
-        result = null;
-        break;
-      }
-      case "send_magic_link": {
-        const redirectTo = new URL("/", window.location.origin);
-        redirectTo.searchParams.set("oauth", "email");
-        const { error } = await this.sdk().auth.signInWithOtp({
-          email: String(args.email),
-          options: { emailRedirectTo: redirectTo.href },
-        });
-        if (error) throw authError(error);
-        result = null;
-        break;
-      }
       case "send_code": {
         const { error } = await this.sdk().auth.signInWithOtp({
           email: String(args.email),
@@ -400,7 +311,7 @@ export class BrowserCloud {
       }
       case "import_guest":
         result = await this.post(
-          "/rest/v1/rpc/planner_import_guest",
+          SUPABASE_ROUTES.importGuest,
           { p_payload: args.payload },
           String(args.accountKey),
         );
@@ -408,7 +319,7 @@ export class BrowserCloud {
       case "planner_call": {
         const params = args.args as Record<string, unknown>;
         result = await this.post(
-          "/rest/v1/rpc/planner_call",
+          SUPABASE_ROUTES.planner,
           { p_action: args.action, p_args: params, p_timezone: args.timezone },
           typeof params._accountKey === "string"
             ? params._accountKey
@@ -417,9 +328,15 @@ export class BrowserCloud {
         break;
       }
       case "generate_weekly_review":
-        result = await this.post("/functions/v1/weekly-review", {
+        result = await this.post(SUPABASE_ROUTES.weeklyReview, {
           timezone: args.timezone,
           ...(args.preview ? { preview: true } : {}),
+        });
+        break;
+      case "suggest_tasks":
+        result = await this.post(SUPABASE_ROUTES.taskSuggestions, {
+          timezone: args.timezone,
+          target: args.target,
         });
         break;
       default:

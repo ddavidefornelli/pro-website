@@ -1,20 +1,13 @@
 import type { Dashboard, Task } from "./types.ts";
-import { errorMessage } from "./errors.ts";
-import { trackedSeconds } from "./task-model.ts";
-import { DAY_MS, localDay } from "./time.ts";
+import type { QueuedAction, TaskAction, TaskArguments } from "./commands.ts";
+import { alignDashboardDate } from "./dashboard.ts";
+import { errorCode, errorMessage } from "./errors.ts";
+import { applyCommand, project } from "./task-projection.ts";
 
 export const QUEUE_STORAGE_VERSION = 1;
 const INITIAL_RETRY_MS = 1000;
 const MAX_RETRY_MS = 60_000;
 
-export interface QueuedAction {
-  requestId: string;
-  action: string;
-  args: Record<string, unknown>;
-  timezone: string;
-  at: number;
-  revision: number;
-}
 interface SavedState {
   version: typeof QUEUE_STORAGE_VERSION;
   base: Dashboard | null;
@@ -34,138 +27,8 @@ const empty = (): SavedState => ({
   pending: [],
   blocked: null,
 });
-const copy = <T>(value: T): T => structuredClone(value);
 const message = (error: unknown): string =>
   errorMessage(error, "Could not sync. Your changes remain on this device.");
-function alignDate(data: Dashboard, at: number, timezone: string): Dashboard {
-  const today = localDay(at, timezone);
-  if (today === data.today) return data;
-  const tasks = [...data.todayTasks, ...data.tomorrowTasks];
-  data.today = today;
-  data.tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + DAY_MS)
-    .toISOString()
-    .slice(0, 10);
-  data.todayTasks = tasks.filter((task) => task.plannedFor === data.today);
-  data.tomorrowTasks = tasks.filter(
-    (task) => task.plannedFor === data.tomorrow,
-  );
-  data.canPlanTomorrow = true;
-  return data;
-}
-
-/** Mutates an owned snapshot; public callers clone once before replaying commands. */
-export function applyCommand(
-  data: Dashboard,
-  command: QueuedAction,
-  result?: Task,
-): Task {
-  const { action, args, at } = command;
-  alignDate(data, at, command.timezone);
-  const tasks = [...data.todayTasks, ...data.tomorrowTasks];
-  if (data.activeTask && !tasks.some((task) => task.id === data.activeTask!.id))
-    tasks.push(data.activeTask);
-  let task = tasks.find((item) => item.id === args.id);
-  if (action === "create_task") {
-    task = {
-      id: command.requestId,
-      outcome: String(args.outcome).trim(),
-      plannedFor: String(args.day),
-      estimatedMinutes: Number(args.estimatedMinutes),
-      isPriority: !tasks.some((item) => item.plannedFor === args.day),
-      actualSeconds: 0,
-      status: "planned",
-      startedAt: null,
-      completedOn: null,
-      createdAt: at,
-      resources: [],
-    };
-    tasks.push(task);
-  }
-  if (!task)
-    throw new Error(
-      "This task is not available in the local planner. Sync before changing it.",
-    );
-  const stop = () => {
-    task!.actualSeconds = trackedSeconds(task!, at);
-    task!.startedAt = null;
-  };
-  switch (action) {
-    case "rename_task":
-      task.outcome = String(args.outcome).trim();
-      break;
-    case "change_estimate":
-      task.estimatedMinutes = Number(args.minutes);
-      break;
-    case "prioritize_task":
-      for (const item of tasks)
-        if (item.plannedFor === task.plannedFor)
-          item.isPriority = item.id === task.id;
-      break;
-    case "start_task":
-      task.status = "active";
-      task.startedAt = at;
-      break;
-    case "resume_task":
-      task.startedAt = at;
-      break;
-    case "pause_task":
-    case "stop_timer":
-      stop();
-      break;
-    case "complete_task": {
-      const wasCompleted = task.status === "completed";
-      stop();
-      task.status = "completed";
-      task.completedOn = localDay(at, command.timezone);
-      if (!wasCompleted) {
-        const completion = data.completions.find(
-          (item) => item.day === task!.completedOn,
-        );
-        if (completion) completion.count++;
-        else data.completions.push({ day: task.completedOn, count: 1 });
-      }
-      break;
-    }
-    case "add_task_link":
-      task.resources.push({
-        id: command.requestId,
-        kind: "link",
-        label: String(args.label).trim(),
-        target: String(args.target).trim(),
-      });
-      break;
-    case "remove_task_resource":
-      task.resources = task.resources.filter(
-        (item) => item.id !== args.resourceId,
-      );
-      break;
-  }
-  data.revision = (data.revision ?? 0) + 1;
-  if (result) {
-    const { serverRevision, ...savedTask } = copy(result);
-    Object.assign(task, savedTask);
-    data.revision = serverRevision ?? data.revision;
-  }
-  data.todayTasks = tasks.filter((item) => item.plannedFor === data.today);
-  data.tomorrowTasks = tasks.filter(
-    (item) => item.plannedFor === data.tomorrow,
-  );
-  data.activeTask = tasks.find((item) => item.status === "active") ?? null;
-  data.canPlanTomorrow = true;
-  return task;
-}
-
-/** Pure projection, used both for immediate UI and crash recovery. Server validation remains authoritative. */
-export function project(
-  base: Dashboard,
-  command: QueuedAction,
-  result?: Task,
-): Dashboard {
-  const data = copy(base);
-  applyCommand(data, command, result);
-  return data;
-}
-
 function validateAcknowledgement(command: QueuedAction, task: Task): void {
   const expectedId =
     command.action === "create_task" ? command.requestId : command.args.id;
@@ -251,7 +114,7 @@ export class LocalQueue {
   private async update(work: () => void): Promise<void> {
     await this.lock(`${this.key}:state`, async () => {
       this.load();
-      const previous = copy(this.state);
+      const previous = structuredClone(this.state);
       try {
         work();
         this.storage.setItem(this.key, JSON.stringify(this.state));
@@ -293,18 +156,18 @@ export class LocalQueue {
   }
   snapshot(): Dashboard | null {
     if (!this.state.base) return null;
-    const data = copy(this.state.base);
+    const data = structuredClone(this.state.base);
     for (const command of this.state.pending) applyCommand(data, command);
     data.serverNow += Math.max(0, Date.now() / 1000 - this.state.savedAt);
-    return alignDate(
+    return alignDashboardDate(
       data,
       data.serverNow,
       Intl.DateTimeFormat().resolvedOptions().timeZone,
     );
   }
-  async enqueue(
-    action: string,
-    args: Record<string, unknown>,
+  async enqueue<Action extends TaskAction>(
+    action: Action,
+    args: TaskArguments[Action],
     timezone: string,
   ): Promise<Task> {
     let result!: Task;
@@ -322,7 +185,7 @@ export class LocalQueue {
       const command: QueuedAction = {
         requestId: crypto.randomUUID(),
         action,
-        args: copy(args),
+        args: structuredClone(args),
         timezone,
         at: Math.floor(current.serverNow),
         revision: current.revision ?? 0,
@@ -333,8 +196,16 @@ export class LocalQueue {
       this.state.pending.push(command);
     });
     void this.sync();
-    return copy(result);
+    return structuredClone(result);
   }
+  private scheduleRetry(delay: number): void {
+    if (this.stopped || this.retryTimer) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.sync();
+    }, delay);
+  }
+
   sync(): Promise<void> {
     if (this.stopped) return Promise.resolve();
     if (this.running) return this.running;
@@ -372,33 +243,20 @@ export class LocalQueue {
         this.lastError = "";
         this.retryDelay = INITIAL_RETRY_MS;
       } catch (error) {
-        const code =
-          typeof error === "object" && error !== null && "code" in error
-            ? error.code
-            : "";
-        if (code === "validation" && this.state.pending.length) {
+        if (errorCode(error) === "validation" && this.state.pending.length) {
           await this.update(() => {
             this.state.blocked = message(error);
           });
         } else {
           this.lastError = message(error);
-          if (!this.stopped) {
-            this.retryTimer = setTimeout(() => {
-              this.retryTimer = null;
-              void this.sync();
-            }, this.retryDelay);
-            this.retryDelay = Math.min(this.retryDelay * 2, MAX_RETRY_MS);
-          }
+          this.scheduleRetry(this.retryDelay);
+          this.retryDelay = Math.min(this.retryDelay * 2, MAX_RETRY_MS);
         }
       }
     })
       .catch((error) => {
         this.lastError = message(error);
-        if (!this.stopped && !this.retryTimer)
-          this.retryTimer = setTimeout(() => {
-            this.retryTimer = null;
-            void this.sync();
-          }, MAX_RETRY_MS);
+        this.scheduleRetry(MAX_RETRY_MS);
       })
       .finally(() => {
         this.running = null;
@@ -442,6 +300,7 @@ export class LocalQueue {
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     await this.running;
   }
 }

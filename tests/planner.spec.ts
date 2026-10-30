@@ -1,12 +1,11 @@
-import { test, expect, openPlanner, addTask, synced, pendingCount, QUEUE_KEY, AUTH_KEY } from "./helpers/browser";
+import { test, expect, openPlanner, visitProfile, addTask, synced, pendingCount, QUEUE_KEY, AUTH_KEY } from "./helpers/browser";
 
 test.use({ signedIn: true });
 
-test("empty plans stay minimal and the header uses the new logo", async ({ page }) => {
+test("empty plans stay minimal with a single planner navigation", async ({ page }) => {
   await openPlanner(page);
-  const logo = page.getByRole("link", { name: "prune home" }).getByRole("img", { name: "prune" });
-  await expect(logo).toHaveAttribute("src", "/prune-logo.png");
-  expect(await logo.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+  await expect(page.getByRole("navigation")).toHaveCount(1);
+  await expect(page.locator(".site-header, .account-bar")).toHaveCount(0);
   for (const view of ["Today", "Tomorrow"]) {
     await page.getByRole("navigation").getByRole("button", { name: view, exact: true }).click();
     await expect(page.getByRole("main", { name: view, exact: true })).toBeVisible();
@@ -86,7 +85,8 @@ test("plans three equal tasks, starts the second, pauses with a reason and compl
   await second.getByRole("button", { name: "Start focus", exact: true }).click();
   await expect(page.locator("#focus-timer")).toBeVisible();
   await expect(page.getByRole("navigation").getByRole("button", { name: "Today", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Profile", exact: true })).toBeDisabled();
+  await expect(page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Profile", exact: true })).toHaveCount(0);
   await expect(page.locator("#focus-timer")).toBeEnabled();
   await page.locator("#focus-timer").click();
   await expect(page.getByRole("dialog", { name: "Why are you stopping?" })).toBeVisible();
@@ -205,7 +205,7 @@ test("rejected cross-device changes stay visible until explicitly discarded", as
 
 test("weekly reviews are automatic, can be turned off in Profile, and have no manual preview", async ({ page, backend }) => {
   await openPlanner(page);
-  expect(backend.requests.filter((request) => request.path.includes("/functions/"))).toHaveLength(0);
+  expect(backend.requests.filter((request) => request.path.includes("/functions/v1/weekly-review"))).toHaveLength(0);
   await page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true }).click();
   expect(backend.weekly.settings.enabled).toBe(true);
   await expect(page.locator(".review-countdown")).toBeVisible();
@@ -244,13 +244,15 @@ test("profile stats and local-only sign-out preserve pending work and sign out o
   backend.offline = true;
   await addTask(page, "Unsynced work is retained");
   await expect.poll(() => pendingCount(page)).toBe(1);
-  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await visitProfile(page);
   await expect(page.locator(".profile-email")).toHaveText("user@example.com");
   await expect(page.getByRole("heading", { name: "All time", exact: true })).toBeVisible();
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Send code" })).toBeVisible();
-  await expect(second.getByRole("button", { name: "Send code" })).toBeVisible();
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
+  await expect(second.getByRole("main", { name: "Today", exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("Unsynced work is retained");
+  await expect(second.locator("body")).not.toContainText("Remember this task");
   expect(await page.evaluate((key) => localStorage.getItem(key), AUTH_KEY)).toBeNull();
   expect(JSON.parse((await page.evaluate((key) => localStorage.getItem(key), QUEUE_KEY))!).pending).toHaveLength(1);
   expect(backend.requests.some((request) => request.path === "/auth/v1/logout?scope=local")).toBe(true);
@@ -267,7 +269,7 @@ test("mobile task, focus, profile and overview layouts have no page-level horizo
       await page.getByRole("navigation").getByRole("button", { name: view, exact: true }).click();
       expect(await page.evaluate(() => document.documentElement.scrollWidth), `${view} at ${viewport.width}`).toBeLessThanOrEqual(viewport.width);
     }
-    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await visitProfile(page);
     await expect(page.locator(".profile-page")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
     await page.getByRole("navigation").getByRole("button", { name: "Today", exact: true }).click();

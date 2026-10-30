@@ -29,9 +29,7 @@ export function Dialog(props: DialogProps) {
   return (
     <dialog
       {...attributes}
-      ref={(element) => {
-        dialog = element;
-      }}
+      ref={(element) => (dialog = element)}
       onCancel={(event) => {
         event.preventDefault();
         if (!local.preventCancel) local.onDismiss();

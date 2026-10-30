@@ -1,6 +1,6 @@
 # prune — web app
 
-A mobile-first daily planner and focus timer, with immediate guest access and optional account sign-in at `/` and an **Install for Mac** button in the top-right corner. `/download` still starts the Mac download.
+A mobile-first daily planner and focus timer, with immediate guest access at `/` and optional account sign-in from **Overview → Sign in**. `/download` starts the Mac download.
 
 **Launch status:** see [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for the security review, test results and remaining hosted launch gates. Passing local tests is not production approval.
 
@@ -24,11 +24,11 @@ VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_LEGACY_ANON_KEY
 
 These are public browser settings, embedded **at build time**. A modern `sb_publishable_…` key or legacy anon key is accepted. Never use a service-role key, `sb_secret_…` key, OpenAI key or other privileged credential. Partial/unsafe configuration fails Vite startup/build; production builds also fail when configuration is entirely missing. An unconfigured development checkout displays a setup error and cannot falsely report successful signup. Do not put real keys into tests.
 
-Visitors can plan immediately without an account. Guest tasks and stop reasons are saved only in this browser under `prune:guest:v1`; clearing site data loses them. Guest mode does not send planner data to Supabase or OpenAI. Choose **Save & sync across devices** to accept the notice and sign in using Google or an email magic link (email-code fallback remains supported). Open magic links in the browser where guest planning started. A returning verified session is restored only after this browser has acknowledged the current privacy notice.
+Visitors can plan immediately without an account. Guest tasks and stop reasons are saved only in this browser under `prune:guest:v1`; clearing site data loses them. Guest mode does not send planner data to Supabase or OpenAI. Choose **Overview → Sign in** to accept the notice and sign in using an emailed one-time code. Guest tasks transfer to the verified account before the account planner opens. A returning verified session is restored only after this browser has acknowledged the current privacy notice.
 
 Before deploying, apply `supabase/migrations/20261028000100_guest_import.sql` after the previous migrations. Guest import is an authenticated, atomic RPC with a durable import receipt: a failed/ambiguous response retains the guest journal, and retries use the same import identity and payload. Imports do not overwrite existing account tasks. If a planning day has no free slots or the account already has an active task, the import fails without partial writes; the guest copy remains on this device. Once transfer starts, guest edits are frozen and the transfer is bound to that account until completion.
 
-For magic links, configure the Supabase email template to include `{{ .ConfirmationURL }}` (optionally also `{{ .Token }}` for the code fallback). Allow the website origin with `/?oauth=email` in Auth redirect URLs, alongside `/?oauth=google`. Email delivery and Google OAuth still require the existing provider configuration. A missing backend import migration must be fixed before Save & sync can complete.
+Configure the Supabase email templates to display `{{ .Token }}` for code entry. Existing `/?oauth=email` and `/?oauth=google` callbacks remain supported for already-issued links, but the current UI does not initiate those flows. A missing backend import migration must be fixed before guest transfer can complete.
 
 ## Features
 
@@ -58,9 +58,20 @@ Do **not** reset the Mac app's database or create a parallel account store. Poin
 /auth/v1/otp, /verify, /user, /token, /logout
 /rest/v1/rpc/planner_call
 /functions/v1/weekly-review
+/functions/v1/task-suggestions
 ```
 
 Backend source, RLS, transactional planner rules, idempotent receipts, AI quotas and migrations remain in `../pro/supabase`. Apply any outstanding migrations there, including the local-queue protocol and `20261019000100_tomorrow_available.sql`. This website does not apply migrations or make administrative changes automatically. Provider secrets remain in the Edge Function, never in this repo's frontend configuration.
+
+### Suggestions from the previous day
+
+When Today or Tomorrow has open slots, signed-in users see up to three proposals derived from the **previous day's** tasks (Today from yesterday, Tomorrow from today): unfinished tasks carry over with their remaining estimate, and completed tasks may suggest a clearly implied next step. The `task-suggestions` Edge Function loads both days' tasks server-side (the browser sends only its timezone and `target: "today" | "tomorrow"`) and asks OpenAI (`gpt-4.1-mini`, `store: false`) for structured suggestions, which are clamped and deduplicated before returning. It respects the account's AI preference (`ai_enabled`) and deletion flag, never calls OpenAI when the previous day was empty or the target day is full, and is capped at five attempts per account per target day. Tomorrow's proposals are re-requested when today's tasks change. Guests never call it. To deploy:
+
+1. Apply `supabase/migrations/20261030000100_task_suggestions.sql` (usage counter + server-only `planner_reserve_suggestion`).
+2. `npx supabase functions deploy task-suggestions` with secrets `OPENAI_API_KEY` and `ALLOWED_ORIGINS` (same values as `weekly-review`). It imports shared code from `server/` and `src/planner/`.
+3. Rebuild this client so the CSP `connect-src` includes the new function path.
+
+If the function is missing or fails, the plan simply shows no suggestions.
 
 ### Account deletion
 
@@ -81,17 +92,9 @@ Review this list and permanently delete the corresponding **Auth users** via Sup
 
 Enable Supabase email Auth and configure SMTP for production delivery. Email templates (including Magic Link and Confirm Signup) must display `{{ .Token }}` so users can enter the code on the website, rather than follow a magic link. Keep this aligned with the Mac app’s existing email-code configuration. Auth rate limits, code expiry and email delivery still need hosted smoke tests; do not enable a mandatory CAPTCHA until a matching client flow is added.
 
-### Google sign-in
+### Existing authentication callbacks
 
-The landing page also offers **Sign in with Google**, after the same Terms & Privacy acknowledgement. It uses the active Supabase transport (not the unfinished Clerk transport), with a PKCE authorization-code exchange. Returning users pass the existing server-side Auth identity check before planner caches are opened.
-
-Before using it on a hosted project:
-
-1. Create a Google OAuth **Web application** client and configure its consent screen (add test users if the Google app is in testing).
-2. Add the callback URL displayed by Supabase (usually `https://<project-ref>.supabase.co/auth/v1/callback`) to Google's authorized redirect URIs.
-3. Enable **Google** under Supabase Authentication → Providers and enter the Google client ID and client secret there. Never put the secret in Vite variables or source code.
-4. In Supabase Authentication → URL Configuration, allow the exact website return URL `https://www.prune.win/?oauth=google` (and equivalent URLs for any supported alternate or local origins). Keep the Site URL set to the canonical website origin.
-5. Smoke-test new and returning Google users, cancellation, sign-out and existing-account linking against the hosted project. Automated tests use fixtures, not live Google credentials.
+The current sign-in screen uses email codes only. Unused Google/magic-link initiation methods have been removed; this does not remove accounts or change backend provider settings. The Supabase transport still completes already-issued `/?oauth=google` and `/?oauth=email` PKCE callbacks, removes callback parameters from the URL, and verifies identity before opening an account cache. Keep any required existing redirect URLs configured until older links/clients have been retired. The unfinished Clerk transport is not selected by the current app.
 
 ### Weekly AI CORS
 
@@ -218,17 +221,22 @@ The checker does not prove authenticated account isolation or backend deployment
 
 ```text
 src/
-  App.tsx                       Session bootstrap, error boundary and download route
+  App.tsx                       Error boundary and download/session route selection
   index.tsx                     The single Solid render root and private analytics URLs
-  auth/SignIn.tsx               Email-code flow and notice acknowledgement UI
-  components/                   Shared native dialog, privacy policy, header and canvas
+  auth/                         Session phases, guest transfer and email-code sign-in UI
+  components/                   Native dialog, privacy policy, download page and canvas
   planner/
     Planner.tsx                 Feature composition and navigation/onboarding state
     create-planner.ts           Reactive dashboard, mutations, clock and lifecycle
     components/                 Plans, task editor, estimate dial, focus, calendar and tour
-    api.ts                      Transport-independent planner client and durable queue
-    browser.ts                  Supabase auth and bounded authenticated HTTP transport
-    local-queue.ts              Versioned snapshots, ordered retries and cross-tab locks
+    api.ts                      Planner client: typed queries, mutations and account access
+    commands.ts                 Typed RPC results, task arguments and saved command format
+    browser.ts                  Supabase authentication and authenticated requests
+    api-fetch.ts                Bounded HTTP requests, cancellation and response limits
+    account-queue.ts            Browser locks, sync listeners and protocol negotiation
+    local-queue.ts              Versioned snapshots, atomic storage and ordered retries
+    task-projection.ts          Pure task mutation replay, including legacy saved commands
+    dashboard.ts                Shared task selection and timezone-aware day alignment
     types.ts                    Shared API/domain contracts; no UI dependencies
     constants.ts                UI bounds, estimate ranges, views and polling intervals
     task-model.ts               Pure task-completion and tracked-time rules
@@ -237,15 +245,22 @@ src/
     privacy-state.ts            Versioned, device-local legal acknowledgement
   profile/                      Profile components and pure calendar-based statistics
   reviews/                      Independent AI state, preferences, reports and countdown
-  shared/                       Pure cross-runtime timing, pixel and deployment constants
+  shared/                       Cross-runtime rules, API paths and browser lifecycle hooks
   styles/                       Base component styles and mobile-first web layout
+server/
+  http.ts                       Shared bounded reads and explicitly safe API errors
+  planner-handler.ts            Validated, account-scoped gateway dispatch
+  weekly-review/                Review validation, provider requests and quota orchestration
+  task-suggestions/             Previous-day task proposals: handler, OpenAI request, output validation
 ```
+
+See [refactoring notes](docs/refactoring.md) for the cleanup boundaries and compatibility guarantees.
 
 ### Code quality
 
 ```sh
 npm run check          # Strict typecheck (including server/API), ESLint + Solid rules, formatting
-npm run format         # Format maintained frontend source
+npm run format         # Format maintained frontend, server and API source
 npm run test:unit      # Domain/queue/security tests and Solid lifecycle tests
 npm run test:e2e       # Production-artifact Chromium + WebKit workflows
 ```
@@ -257,7 +272,7 @@ CI runs the same quality gates before testing and packaging. Supabase CLI, PGlit
 - Render with JSX and `Show`/`For`/`Switch`; use effects only for external effects, subscriptions and measurements. No manual `replaceChildren` rendering, nested render roots, unsafe HTML sinks or global DOM-based state synchronization.
 - `createPlanner` owns one session's reactive UI state. Store reconciliation preserves task identities, drafts and focused controls during background refresh. Components own local form drafts; focus notes remain memory-only and reset when the active task changes.
 - Controllers, dialogs, the canvas and navigation/tour measurements register cleanup with their Solid owner. Session disposal also stops the outbox, auth refresh and browser subscriptions; late startup/read responses cannot initialize a disposed client.
-- `PlanningClient` owns persistence and transport. Persisted snapshot versions, storage keys, idempotency identities and the shared RPC contract are deliberately unchanged. Legacy queue projection branches must remain while saved commands or supported Mac clients can use them.
+- `PlanningClient` coordinates account access, typed queries and task mutations; `GuestStore`, `LocalQueue` and the transport own their respective storage/network details. Persisted snapshot versions, storage keys, idempotency identities and the shared RPC contract are deliberately unchanged. Legacy queue projection branches must remain while saved commands or supported Mac clients can use them.
 - Weekly AI state is independent of task mutation state. Preference writes invalidate older reads, and pending-review polling stops when its screen is hidden or its owner is disposed.
 - Backend/schema cleanup must consider **all** clients. See [the database review](docs/database-review.md): no table or column was safe to drop, and no hosted schema or user data was changed.
 

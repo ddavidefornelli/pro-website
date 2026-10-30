@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
 import { test as base, expect, type Page } from "@playwright/test";
-import { project, type QueuedAction } from "../../src/planner/local-queue";
-import type { Dashboard, WeeklyOverview, WeeklyReview } from "../../src/planner/api";
+import { project } from "../../src/planner/task-projection";
+import type { QueuedAction } from "../../src/planner/commands";
+import type { Dashboard, TaskSuggestion, WeeklyOverview, WeeklyReview } from "../../src/planner/types";
 import { PRIVACY_ACKNOWLEDGEMENT_KEY, PRIVACY_POLICY_VERSION } from "../../src/planner/privacy-state";
 
 export const PROJECT = "https://web-fixture.supabase.co";
@@ -37,6 +38,7 @@ export interface Backend {
   malformedAcknowledgement: boolean;
   failSignIn: boolean;
   previewStatus: number;
+  suggestions: TaskSuggestion[];
   protocolVersion: number;
   receipts: Map<string, unknown>;
 }
@@ -46,12 +48,18 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
   expired: [false, { option: true }],
   firstVisit: [false, { option: true }],
   backend: async ({ context, signedIn, expired, firstVisit }, use) => {
-    const state: Backend = { data: dashboard(), weekly: overview(), requests: [], stops: [], offline: false, rejectWrites: false, isDeleted: false, loseNextAcknowledgement: false, malformedAcknowledgement: false, failSignIn: false, previewStatus: 200, protocolVersion: 1, receipts: new Map() };
+    const state: Backend = { data: dashboard(), weekly: overview(), requests: [], stops: [], offline: false, rejectWrites: false, isDeleted: false, loseNextAcknowledgement: false, malformedAcknowledgement: false, failSignIn: false, previewStatus: 200, suggestions: [], protocolVersion: 1, receipts: new Map() };
     // Seed once per browser context, not on reload/sign-out or each new tab.
     await context.addInitScript(({ signedIn, initialSession, authKey, privacyKey, version, firstVisit, onboardingKey }) => {
       if (localStorage.getItem("prune:test:seeded")) return;
       localStorage.setItem("prune:test:seeded", "true");
-      if (!firstVisit) localStorage.setItem(onboardingKey, "done");
+      // Most workflows are returning visits. Dedicated cookie/onboarding specs
+      // exercise the first-visit prompts without these fixture preferences.
+      localStorage.setItem("prune:cookies:v1", JSON.stringify({ choice: "rejected", at: Date.now() }));
+      if (!firstVisit) {
+        localStorage.setItem(onboardingKey, "done");
+        localStorage.setItem("prune:onboarding:v1:guest", "done");
+      }
       if (signedIn) {
         localStorage.setItem(privacyKey, JSON.stringify({ version, acknowledgedAt: new Date().toISOString() }));
         localStorage.setItem(authKey, JSON.stringify(initialSession));
@@ -82,6 +90,7 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
         await send(body.preview ? { review: review() } : {});
         return;
       }
+      if (url.pathname === "/functions/v1/task-suggestions") { await send({ day: body.target === "tomorrow" ? state.data.tomorrow : state.data.today, suggestions: state.suggestions }); return; }
       if (url.pathname !== "/rest/v1/rpc/planner_call") { await send({ error: "Unexpected fixture route" }, 404); return; }
       if (state.offline) { await route.abort("internetdisconnected"); return; }
       const action = body.p_action;
@@ -140,9 +149,23 @@ export const test = base.extend<{ backend: Backend; signedIn: boolean; expired: 
 export { expect };
 export async function openPlanner(page: Page) {
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+  await expect(page.locator('nav[aria-label="Main navigation"]')).toBeVisible();
   await expect(page.locator(".plan-date")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add task", exact: true })).toBeEnabled();
+  await expect(page.locator(".task-form .add-task")).toBeEnabled();
+}
+/** Open sign-in through the current guest Overview, not a retired landing route. */
+export async function showSignIn(page: Page) {
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
+}
+export async function openSignIn(page: Page) {
+  await page.goto("/");
+  await showSignIn(page);
+}
+export async function visitProfile(page: Page) {
+  await page.getByRole("button", { name: "Overview", exact: true }).click();
+  await page.getByRole("button", { name: "Profile", exact: true }).click();
 }
 export async function addTask(page: Page, outcome: string) {
   await page.getByRole("textbox", { name: "Outcome", exact: true }).fill(outcome);

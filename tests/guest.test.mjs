@@ -24,6 +24,25 @@ test('guest tasks persist without any account or network', async () => {
   assert.ok(storage.getItem(GUEST_KEY));
 });
 
+test('guest mutations read one journal and never persist an already-replayed base', async () => {
+  const { store, storage } = fixture();
+  const day = store.dashboard().today;
+  const read = storage.getItem;
+  let reads = 0;
+  storage.getItem = (key) => { reads++; return read(key); };
+  const task = await store.mutate('create_task', { outcome: 'Original', day, estimatedMinutes: 30 }, timezone);
+  assert.equal(reads, 1);
+  await store.mutate('rename_task', { id: task.id, outcome: 'Renamed' }, timezone);
+  assert.equal(reads, 2);
+  const saved = JSON.parse(storage.getItem(GUEST_KEY));
+  assert.equal(saved.base.todayTasks.length, 0);
+  assert.equal(saved.commands.length, 2);
+  const restored = new GuestStore(storage).dashboard();
+  assert.equal(restored.todayTasks.length, 1);
+  assert.equal(restored.todayTasks[0].outcome, 'Renamed');
+  assert.equal(restored.revision, 2);
+});
+
 test('local save failure is not reported as success', async () => {
   const { store, storage } = fixture();
   storage.setItem = () => { throw new Error('quota'); };

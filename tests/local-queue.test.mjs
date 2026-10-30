@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LocalQueue, project } from "../src/planner/local-queue.ts";
+import { LocalQueue } from "../src/planner/local-queue.ts";
+import { project } from "../src/planner/task-projection.ts";
 import { deferred, persistence } from "./helpers/queue.mjs";
 
 const day = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC" }).format(new Date());

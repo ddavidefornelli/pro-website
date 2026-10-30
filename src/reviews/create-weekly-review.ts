@@ -1,5 +1,6 @@
 import { createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import type { PlanningClient } from "../planner/api";
+import { onWake } from "../shared/on-wake.ts";
 import { POLLING } from "../planner/constants.ts";
 import type { WeeklyOverview } from "../planner/types";
 
@@ -79,22 +80,16 @@ export function createWeeklyReview(
     }, POLLING.pendingReview);
     onCleanup(() => window.clearInterval(timer));
   });
+  onWake(() => void checkDue());
   onMount(() => {
-    const wake = () => {
-      if (document.visibilityState !== "hidden") void checkDue();
-    };
     const timer = window.setInterval(() => {
       void checkDue();
     }, POLLING.weeklyReview);
-    window.addEventListener("focus", wake);
-    document.addEventListener("visibilitychange", wake);
     void checkDue();
     onCleanup(() => {
       disposed = true;
       version++;
       window.clearInterval(timer);
-      window.removeEventListener("focus", wake);
-      document.removeEventListener("visibilitychange", wake);
     });
   });
 

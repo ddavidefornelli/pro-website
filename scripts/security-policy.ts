@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
 import { hasMarketingTracker } from "./tracking-policy.ts";
 import { PRODUCTION_ORIGINS } from "../src/shared/site.ts";
+import { SUPABASE_ROUTES } from "../src/shared/api-routes.ts";
 
 // Deliberately no origin-wide allowlist: do not permit Storage, arbitrary RPCs,
 // other Edge Functions, Realtime or another Supabase tenant.
-export const API_PATHS = [
-  "/auth/v1/otp", "/auth/v1/verify", "/auth/v1/user", "/auth/v1/token", "/auth/v1/logout",
-  "/rest/v1/rpc/planner_call", "/rest/v1/rpc/planner_import_guest", "/functions/v1/weekly-review",
-] as const;
+export const API_PATHS = Object.values(SUPABASE_ROUTES);
 
 // Exceptions for managed (non-SRI-pinned) analytics scripts.
 export const ANALYTICS_ORIGINS = PRODUCTION_ORIGINS;

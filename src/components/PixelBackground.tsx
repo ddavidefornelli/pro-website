@@ -108,9 +108,7 @@ export default function PixelBackground(props: { completionLevel: number }) {
       {/* Fixed resolution avoids multiplying background work on Retina screens. */}
       <canvas
         class="pixel-grid"
-        ref={(element) => {
-          canvas = element;
-        }}
+        ref={(element) => (canvas = element)}
         width={PIXEL_WIDTH}
         height={PIXEL_HEIGHT}
       />

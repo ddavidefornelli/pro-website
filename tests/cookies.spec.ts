@@ -21,10 +21,9 @@ test("optional recorder waits for consent, remembers it and stops after withdraw
   const banner = page.getByRole("region", { name: "Cookie preferences" });
   await expect(banner).toBeVisible();
   expect(recorderRequests).toEqual([]);
-  await page.getByRole("textbox", { name: "Task outcome" }).fill("Test task");
-  await page.getByRole("button", { name: "Next: set a time estimate" }).click();
-  await page.getByRole("button", { name: "Create my first task" }).click();
-  await page.getByRole("button", { name: "Skip tour" }).click();
+  await page.getByRole("textbox", { name: "Outcome", exact: true }).fill("Test task");
+  await page.getByRole("textbox", { name: "Outcome", exact: true }).press("Enter");
+  await expect(page.getByText("Test task", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Reject optional", exact: true }).click();
   await page.reload();
   await expect(banner).toHaveCount(0);

@@ -1,4 +1,4 @@
-import { test, expect, openPlanner, addTask, synced, QUEUE_KEY } from "./helpers/browser";
+import { test, expect, openPlanner, visitProfile, addTask, synced, QUEUE_KEY } from "./helpers/browser";
 
 test.use({ signedIn: true });
 
@@ -15,6 +15,34 @@ test("Overview contains the profile button without a separate account row", asyn
   await expect(page.getByRole("main", { name: "Profile", exact: true })).toBeVisible();
   await navigation.getByRole("button", { name: "Overview", exact: true }).click();
   await expect(overview.getByRole("button", { name: "Profile", exact: true })).toBeVisible();
+});
+
+test("profile clock ticks do not reparse completion history", async ({ page, backend }) => {
+  backend.data.completions = Array.from({ length: 200 }, (_, index) => ({
+    day: new Date(Date.parse(`${backend.data.today}T00:00:00Z`) - index * 86_400_000).toISOString().slice(0, 10),
+    count: 1,
+  }));
+  await page.clock.install();
+  await openPlanner(page);
+  await visitProfile(page);
+  await expect(page.locator(".profile-stat").filter({ hasText: "Active days" })).toContainText("200");
+  const audit = await page.evaluateHandle(() => {
+    const originalParse = Date.parse;
+    const originalNow = Date.now;
+    let parses = 0;
+    let ticks = 0;
+    Date.parse = (value) => { parses++; return originalParse(value); };
+    Date.now = () => { ticks++; return originalNow(); };
+    return () => {
+      Date.parse = originalParse;
+      Date.now = originalNow;
+      return { parses, ticks };
+    };
+  });
+  await page.clock.fastForward(2_000);
+  const result = await audit.evaluate((finish) => finish());
+  expect(result.ticks).toBeGreaterThan(0);
+  expect(result.parses).toBe(0);
 });
 
 test("background reconciliation keeps a title draft and its focused input mounted", async ({ page, backend }) => {

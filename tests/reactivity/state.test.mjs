@@ -1,42 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createRoot, createSignal } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { createPlanner } from "../../src/planner/create-planner.ts";
 import { PlanningClient } from "../../src/planner/api.ts";
 import { createWeeklyReview } from "../../src/reviews/create-weekly-review.ts";
 import { POLLING } from "../../src/planner/constants.ts";
 import { dashboard, deferred } from "../helpers/queue.mjs";
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-/** Small lifecycle harness: real Solid browser reactivity, no DOM or hosted services. */
-function environment(t) {
-  const originals = { window: globalThis.window, document: globalThis.document };
-  const window = new EventTarget();
-  const document = Object.assign(new EventTarget(), { visibilityState: "visible" });
-  const timers = new Map();
-  const disposers = [];
-  let timerId = 0;
-  Object.assign(window, {
-    setInterval: (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; },
-    clearInterval: (id) => timers.delete(id),
-    confirm: () => true,
-  });
-  Object.assign(globalThis, { window, document });
-  t.after(() => {
-    disposers.reverse().forEach((dispose) => dispose());
-    for (const [name, value] of Object.entries(originals)) {
-      if (value === undefined) delete globalThis[name];
-      else globalThis[name] = value;
-    }
-  });
-  return {
-    window, document, timers,
-    mount(factory) {
-      return createRoot((dispose) => { disposers.push(dispose); return { state: factory(), dispose }; });
-    },
-  };
-}
+import { environment, settle } from "../helpers/reactivity.mjs";
 
 function task(data, overrides = {}) {
   return { id: "task-1", outcome: "A small win", plannedFor: data.today, estimatedMinutes: 30,
@@ -79,6 +50,82 @@ test("dashboard reconciliation preserves task identity and memory-only notes", a
   client.data.revision++;
   client.onQueueChange();
   assert.equal(state.notes(), "");
+});
+
+test("time-only dashboard refreshes preserve keyed data without notifying unchanged title subscribers", async (t) => {
+  const env = environment(t);
+  const client = plannerClient();
+  client.data.todayTasks = [task(client.data)];
+  let titleUpdates = 0;
+  const { state } = env.mount(() => {
+    const planner = createPlanner(client);
+    createEffect(() => {
+      planner.data()?.todayTasks[0]?.outcome;
+      titleUpdates++;
+    });
+    return planner;
+  });
+  await settle();
+  const tasks = state.data().todayTasks;
+  const first = tasks[0];
+  const before = titleUpdates;
+  client.data.serverNow += 30;
+  await state.refresh();
+  assert.equal(state.data().todayTasks, tasks);
+  assert.equal(state.data().todayTasks[0], first);
+  assert.equal(titleUpdates, before);
+  assert.ok(Math.abs(state.now() - client.data.serverNow) <= 1);
+});
+
+for (const [action, pendingCount, approved] of [
+  ["signOut", 0, true],
+  ["signOut", 2, true],
+  ["signOut", 2, false],
+  ["deleteAccount", 0, true],
+  ["deleteAccount", 2, false],
+]) {
+  test(`${action} preserves confirmation and reload behavior (pending=${pendingCount}, approved=${approved})`, async (t) => {
+    const env = environment(t);
+    const confirmations = [];
+    let calls = 0;
+    let reloads = 0;
+    env.window.confirm = (message) => { confirmations.push(message); return approved; };
+    env.window.location.reload = () => { reloads++; };
+    const client = { ...plannerClient(), pendingCount, [action]: async () => {
+      assert.equal(state.accountAction(), action === "signOut" ? "signOut" : "delete");
+      calls++;
+    } };
+    const { state } = env.mount(() => createPlanner(client));
+    await settle();
+    await state[action]();
+    assert.equal(confirmations.length, action === "deleteAccount" || pendingCount ? 1 : 0);
+    if (confirmations.length)
+      assert.match(confirmations[0], action === "deleteAccount" ? /Delete your account/ : /Sign out anyway/);
+    assert.equal(calls, approved ? 1 : 0);
+    assert.equal(reloads, calls);
+    assert.equal(state.accountAction(), null);
+    assert.equal(state.busy(), false);
+  });
+}
+
+test("failed account actions clear their busy state, report errors, and cannot run twice concurrently", async (t) => {
+  const env = environment(t);
+  const pending = deferred();
+  let calls = 0;
+  env.window.location.reload = () => assert.fail("A failed sign-out must not reload");
+  const client = { ...plannerClient(), pendingCount: 0, signOut: () => { calls++; return pending.promise; } };
+  const { state } = env.mount(() => createPlanner(client));
+  await settle();
+  const signingOut = state.signOut();
+  await state.deleteAccount();
+  assert.equal(state.busy(), true);
+  assert.equal(state.accountAction(), "signOut");
+  pending.reject(new Error("Sign-out failed"));
+  await signingOut;
+  assert.equal(calls, 1);
+  assert.equal(state.busy(), false);
+  assert.equal(state.accountAction(), null);
+  assert.equal(state.error(), "Sign-out failed");
 });
 
 test("running timers lock the view, but completing a mutation can select Today", async (t) => {
@@ -177,7 +224,7 @@ test("disposing during authentication cannot start an outbox or new subscription
     execute: async (command) => { commands.push(command); return pending.promise; },
     dispose: async () => { disposals++; },
   };
-  const client = new PlanningClient(transport);
+  const client = new PlanningClient({ cloud: transport });
   const restoring = client.authStatus();
   await client.dispose();
   pending.resolve({ configured: true, email: "fixture@example.test", accountKey: "fixture:account" });
