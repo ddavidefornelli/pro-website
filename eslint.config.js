@@ -5,12 +5,18 @@ import solid from "eslint-plugin-solid";
 export default ts.config(
   { ignores: ["dist/**", ".playwright-dist/**", ".vercel/**", "node_modules/**"] },
   {
-    files: ["src/**/*.{ts,tsx}"],
-    extends: [js.configs.recommended, ...ts.configs.recommended, solid.configs["flat/typescript"]],
+    files: ["{src,server,api}/**/*.{ts,tsx}"],
+    extends: [js.configs.recommended, ...ts.configs.recommended],
     rules: {
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-      // Mutation callbacks poll current values; they do not establish subscriptions.
-      "solid/reactivity": ["error", { customReactiveFunctions: ["mutate"] }],
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    extends: [solid.configs["flat/typescript"]],
+    rules: {
+      // Mutation and lifecycle event callbacks intentionally read current signal values.
+      "solid/reactivity": ["error", { customReactiveFunctions: ["mutate", "onWake"] }],
       "solid/no-innerhtml": "error",
     },
   },

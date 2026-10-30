@@ -1,13 +1,16 @@
-import { applyCommand, project, type QueuedAction } from "./local-queue.ts";
-import { DAY_MS, localDay } from "./time.ts";
-import type { Dashboard, Task } from "./types.ts";
+import type { QueuedAction, TaskAction, TaskArguments } from "./commands.ts";
+import { ESTIMATE, PLANNER_LIMITS } from "./constants.ts";
+import { alignDashboardDate, dashboardTasks } from "./dashboard.ts";
+import { applyCommand } from "./task-projection.ts";
+import { localDay, nextDay } from "./time.ts";
+import type { Account, Dashboard, Task } from "./types.ts";
 
 export const GUEST_KEY = "prune:guest:v1";
 export const GUEST_ACCOUNT = {
   configured: true,
   email: "Guest · this device only",
   accountKey: "guest",
-};
+} satisfies Account;
 export interface GuestImport {
   importId: string;
   tasks: Task[];
@@ -19,15 +22,11 @@ interface GuestState {
   commands: QueuedAction[];
   transfer?: { accountKey: string; importId: string };
 }
-export function emptyGuestDashboard(
-  now = Math.floor(Date.now() / 1000),
-): Dashboard {
+function emptyGuestDashboard(now = Math.floor(Date.now() / 1000)): Dashboard {
   const today = localDay(now, Intl.DateTimeFormat().resolvedOptions().timeZone);
   return {
     today,
-    tomorrow: new Date(Date.parse(`${today}T00:00:00Z`) + DAY_MS)
-      .toISOString()
-      .slice(0, 10),
+    tomorrow: nextDay(today),
     todayTasks: [],
     tomorrowTasks: [],
     activeTask: null,
@@ -68,23 +67,21 @@ export class GuestStore {
     return this.load().commands.length > 0;
   }
   dashboard(): Dashboard {
-    const state = this.load();
-    let data = state.base;
-    for (const command of state.commands) data = project(data, command);
-    const fresh = emptyGuestDashboard();
-    const tasks = [...data.todayTasks, ...data.tomorrowTasks];
-    return {
-      ...data,
-      today: fresh.today,
-      tomorrow: fresh.tomorrow,
-      todayTasks: tasks.filter((task) => task.plannedFor === fresh.today),
-      tomorrowTasks: tasks.filter((task) => task.plannedFor === fresh.tomorrow),
-      serverNow: fresh.serverNow,
-    };
+    return this.project(this.load());
   }
-  async mutate(
-    action: string,
-    args: Record<string, unknown>,
+  private project(state: GuestState): Dashboard {
+    const data = structuredClone(state.base);
+    for (const command of state.commands) applyCommand(data, command);
+    data.serverNow = Math.floor(Date.now() / 1000);
+    return alignDashboardDate(
+      data,
+      data.serverNow,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
+  }
+  async mutate<Action extends TaskAction>(
+    action: Action,
+    args: TaskArguments[Action],
     timezone: string,
   ): Promise<Task> {
     return this.lock(async () => {
@@ -93,29 +90,30 @@ export class GuestStore {
         throw new Error(
           "Guest tasks are being saved to an account. Finish Save & sync before making more changes.",
         );
-      const data = this.dashboard();
+      const data = this.project(state);
+      const values: Record<string, unknown> = args;
       if (action === "create_task") {
-        if (
-          !String(args.outcome).trim() ||
-          String(args.outcome).trim().length > 500
-        )
-          throw new Error("Enter a task of 1–500 characters.");
-        if (![data.today, data.tomorrow].includes(String(args.day)))
+        const outcome = String(values.outcome).trim();
+        if (!outcome || outcome.length > PLANNER_LIMITS.outcomeLength)
+          throw new Error(
+            `Enter a task of 1–${PLANNER_LIMITS.outcomeLength} characters.`,
+          );
+        if (![data.today, data.tomorrow].includes(String(values.day)))
           throw new Error("Choose today or tomorrow.");
         const tasks =
-          args.day === data.today ? data.todayTasks : data.tomorrowTasks;
-        if (tasks.length >= 3)
-          throw new Error("Focus on just 3 tasks per day.");
+          values.day === data.today ? data.todayTasks : data.tomorrowTasks;
+        if (tasks.length >= PLANNER_LIMITS.tasksPerDay)
+          throw new Error(
+            `Focus on just ${PLANNER_LIMITS.tasksPerDay} tasks per day.`,
+          );
       }
-      const selected = [
-        ...data.todayTasks,
-        ...data.tomorrowTasks,
-        ...(data.activeTask ? [data.activeTask] : []),
-      ].find((task) => task.id === args.id);
+      const selected = dashboardTasks(data).find(
+        (task) => task.id === values.id,
+      );
       if (
         ["start_task", "resume_task"].includes(action) &&
         data.activeTask &&
-        data.activeTask.id !== args.id
+        data.activeTask.id !== values.id
       )
         throw new Error("Finish the active task before starting another.");
       if (selected?.status === "completed" && action !== "save_pause_reason")
@@ -124,10 +122,13 @@ export class GuestStore {
         throw new Error("Only today's tasks can be started.");
       if (["create_task", "change_estimate"].includes(action)) {
         const minutes = Number(
-          action === "create_task" ? args.estimatedMinutes : args.minutes,
+          action === "create_task" ? values.estimatedMinutes : values.minutes,
         );
-        if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60)
-          throw new Error("Choose an estimate between 1 and 60 minutes.");
+        // Existing Mac tasks allow 1–60; the web dial offers 5-minute steps.
+        if (!Number.isInteger(minutes) || minutes < 1 || minutes > ESTIMATE.max)
+          throw new Error(
+            `Choose an estimate between 1 and ${ESTIMATE.max} minutes.`,
+          );
       }
       const command: QueuedAction = {
         requestId: crypto.randomUUID(),
@@ -137,18 +138,11 @@ export class GuestStore {
         at: Math.floor(Date.now() / 1000),
         revision: state.commands.length,
       };
-      const next = project(data, command);
-      const id = action === "create_task" ? command.requestId : args.id;
-      const task = [
-        ...next.todayTasks,
-        ...next.tomorrowTasks,
-        ...(next.activeTask ? [next.activeTask] : []),
-      ].find((item) => item.id === id);
-      // A completed task from an older day can leave the visible dashboard.
-      const previous = data.activeTask;
+      // Return the mutated task even if completion removes it from the day lists.
+      const task = applyCommand(data, command);
       state.commands.push(command);
       this.save(state); // Never report success before durable storage succeeds.
-      return task ?? { ...previous!, status: "completed", startedAt: null };
+      return structuredClone(task);
     });
   }
   async transfer(

@@ -2,6 +2,8 @@ import {
   createEffect,
   createSignal,
   Match,
+  onCleanup,
+  onMount,
   Show,
   Switch,
   untrack,
@@ -9,19 +11,21 @@ import {
 import PixelBackground from "../components/PixelBackground";
 import { LoadingIndicator } from "../components/LoadingIndicator";
 import { Profile } from "../profile/Profile";
-import { WeeklyReview } from "../reviews/WeeklyReview";
 import { createWeeklyReview } from "../reviews/create-weekly-review";
 import type { PlanningClient } from "./api";
-import { ActivityCalendar } from "./components/ActivityCalendar";
 import { FocusView } from "./components/FocusView";
-import { Onboarding } from "./components/Onboarding";
+import { Overview } from "./components/Overview";
 import { PlanView } from "./components/PlanView";
 import { PlannerNavigation } from "./components/PlannerNavigation";
-import { PlannerTour } from "./components/PlannerTour";
-import { VIEW_LABELS } from "./constants";
+import { ShortcutSheet } from "./components/ShortcutSheet";
+import { VIEW_LABELS, type PlannerView } from "./constants";
 import { createPlanner } from "./create-planner";
-import { shouldOfferOnboarding } from "./onboarding";
+import { createHints } from "./hints";
+import { onboardingKey, shouldOfferOnboarding } from "./onboarding";
+import { createShortcuts } from "./shortcuts";
 import type { Account } from "./types";
+
+const RESUME_KEY = "prune:resume-view:v1";
 
 export function Planner(props: {
   client: PlanningClient;
@@ -29,7 +33,6 @@ export function Planner(props: {
   guest?: boolean;
   onSaveAndSync?: () => void;
 }) {
-  let root!: HTMLDivElement;
   const client = untrack(() => props.client);
   const planner = createPlanner(client);
   const review = createWeeklyReview(
@@ -38,41 +41,59 @@ export function Planner(props: {
       !props.guest &&
       (planner.view() === "habits" || planner.view() === "profile"),
   );
-  const [onboarding, setOnboarding] = createSignal(false);
-  const [tour, setTour] = createSignal(false);
-  let onboardingChecked = false;
-  let firstTaskId: string | null = null;
+  const hints = createHints(untrack(() => props.account.accountKey));
+  const [firstRun, setFirstRun] = createSignal(false);
+  const [shortcuts, setShortcuts] = createSignal(false);
+  const [welcome, setWelcome] = createSignal("");
+  let firstRunChecked = false;
   let previousView = planner.view();
+  createShortcuts(planner, () => setShortcuts(true));
 
-  async function createFirstTask(
-    outcome: string,
-    minutes: number,
-  ): Promise<void> {
-    const success = await planner.mutate(async () => {
-      const task = await client.create(outcome, planner.data()!.today, minutes);
-      firstTaskId = task.id;
-      planner.visit("today");
-    });
-    if (!success) throw new Error(planner.error());
+  function finishFirstRun(): void {
+    if (!firstRun()) return;
+    setFirstRun(false);
+    try {
+      localStorage.setItem(onboardingKey(props.account.accountKey), "done");
+    } catch {
+      /* The first plan does not depend on persistence. */
+    }
   }
 
-  async function startFirstTask(): Promise<void> {
-    const id = firstTaskId;
-    if (!id) return;
-    const success = await planner.mutate(async () => {
-      await client.start(id);
-      planner.visit("focus");
-    });
-    if (!success) throw new Error(planner.error());
+  function saveAndSync(): void {
+    try {
+      sessionStorage.setItem(RESUME_KEY, planner.view());
+    } catch {
+      /* Signing in still works; it just opens on Today. */
+    }
+    props.onSaveAndSync?.();
   }
+
+  onMount(() => {
+    if (props.guest) return;
+    let resume: string | null;
+    try {
+      resume = sessionStorage.getItem(RESUME_KEY);
+      sessionStorage.removeItem(RESUME_KEY);
+    } catch {
+      return;
+    }
+    if (resume === null) return;
+    if (resume in VIEW_LABELS) planner.visit(resume as PlannerView);
+    setWelcome("Signed in. Your plan now syncs across your devices.");
+    const timer = setTimeout(() => setWelcome(""), 5000);
+    onCleanup(() => clearTimeout(timer));
+  });
 
   createEffect(() => {
     const data = planner.data();
-    if (!data || onboardingChecked) return;
-    onboardingChecked = true;
-    setOnboarding(
+    if (!data || firstRunChecked) return;
+    firstRunChecked = true;
+    setFirstRun(
       shouldOfferOnboarding(data, props.account.accountKey, localStorage),
     );
+  });
+  createEffect(() => {
+    if (firstRun() && planner.data()?.todayTasks.length) finishFirstRun();
   });
   createEffect(() => {
     const view = planner.view();
@@ -85,11 +106,9 @@ export function Planner(props: {
       <PixelBackground completionLevel={planner.completionLevel()} />
       <div
         id="app"
-        ref={(element) => {
-          root = element;
-        }}
         data-view={planner.view()}
         data-completion-level={planner.completionLevel()}
+        data-focus-running={planner.focusLocked() ? "" : undefined}
       >
         <PlannerNavigation planner={planner} />
         <div class="sync-bar" hidden={!planner.syncBlocked()}>
@@ -137,96 +156,44 @@ export function Planner(props: {
                 />
               </Match>
               <Match when={planner.view() === "focus"}>
-                <FocusView planner={planner} client={props.client} />
+                <FocusView
+                  planner={planner}
+                  client={props.client}
+                  hints={hints}
+                />
               </Match>
               <Match when={planner.view() === "habits"}>
-                <div class="overview-screen">
-                  <div
-                    class="overview-content"
-                    inert={props.guest ? true : undefined}
-                  >
-                    <div class="overview-actions">
-                      <button
-                        type="button"
-                        class="profile-button"
-                        aria-label="Profile"
-                        aria-controls="planner-content"
-                        title="Profile"
-                        disabled={planner.busy() || planner.focusLocked()}
-                        onClick={() => planner.visit("profile")}
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <circle cx="12" cy="8" r="4" />
-                          <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
-                        </svg>
-                      </button>
-                    </div>
-                    <ActivityCalendar
-                      today={planner.data()!.today}
-                      completions={planner.data()!.completions}
-                    />
-                    <Show when={!props.guest}>
-                      <WeeklyReview review={review} now={planner.clock()} />
-                    </Show>
-                  </div>
-                  <Show when={props.guest}>
-                    <section
-                      class="overview-signin-overlay"
-                      aria-labelledby="overview-signin-title"
-                    >
-                      <div class="overview-signin-prompt">
-                        <h2 id="overview-signin-title">
-                          AI weekly analysis is available only when you sign in.
-                        </h2>
-                        <button
-                          type="button"
-                          onClick={() => props.onSaveAndSync?.()}
-                        >
-                          Sign in
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => planner.visit("profile")}
-                        >
-                          Profile
-                        </button>
-                      </div>
-                    </section>
-                  </Show>
-                </div>
+                <Overview
+                  planner={planner}
+                  review={review}
+                  guest={props.guest}
+                  onSignIn={saveAndSync}
+                />
               </Match>
               <Match
                 when={
                   planner.view() === "today" || planner.view() === "tomorrow"
                 }
               >
-                <PlanView planner={planner} client={props.client} />
+                <PlanView
+                  planner={planner}
+                  client={props.client}
+                  hints={hints}
+                  firstRun={firstRun()}
+                  guest={props.guest}
+                  onSignIn={saveAndSync}
+                  onShortcuts={() => setShortcuts(true)}
+                />
               </Match>
             </Switch>
           </Show>
         </main>
-        <Show when={onboarding()}>
-          <Onboarding
-            accountKey={props.account.accountKey}
-            onDismiss={() => setOnboarding(false)}
-            onCreate={createFirstTask}
-            onCreated={() => {
-              setOnboarding(false);
-              setTour(true);
-            }}
-          />
+        <Show when={shortcuts()}>
+          <ShortcutSheet onDismiss={() => setShortcuts(false)} />
         </Show>
-        <Show when={tour()}>
-          <PlannerTour
-            host={root}
-            onVisit={planner.visit}
-            onDone={(started) => {
-              setTour(false);
-              if (!started) planner.visit("today");
-            }}
-            onStart={startFirstTask}
-          />
-        </Show>
+        <p class="toast" role="status" hidden={!welcome()}>
+          {welcome()}
+        </p>
       </div>
     </>
   );

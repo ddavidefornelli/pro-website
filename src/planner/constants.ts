@@ -29,7 +29,6 @@ export const VIEW_LABELS = {
   profile: "Profile",
 } as const;
 export type PlannerView = keyof typeof VIEW_LABELS;
-export type TourView = Exclude<PlannerView, "profile">;
 export const NAVIGATION_VIEWS = [
   "today",
   "focus",

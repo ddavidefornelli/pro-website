@@ -1,4 +1,4 @@
-import type { Dashboard } from "./api";
+import type { Dashboard } from "./types";
 import { DAY_MS } from "./time.ts";
 
 export type Completion = Dashboard["completions"][number];
@@ -15,7 +15,7 @@ export const MONTHS = [
   "Oct",
   "Nov",
   "Dec",
-];
+] as const;
 export function calendarYear(
   year: number,
   today: string,

@@ -1,9 +1,9 @@
-import { test, expect, openPlanner, addTask, synced } from "./helpers/browser";
+import { test, expect, openPlanner, openSignIn, visitProfile, addTask, synced } from "./helpers/browser";
 
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
 test("touch-first signup and policy remain usable on a phone", async ({ page }, info) => {
-  await page.goto("/");
+  await openSignIn(page);
   await expect(page.getByRole("textbox", { name: "Email address" })).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: `test-results/${info.project.name}-mobile-signup.png`, fullPage: true });
   await page.getByRole("button", { name: "Terms & Privacy", exact: true }).first().tap();
@@ -11,7 +11,7 @@ test("touch-first signup and policy remain usable on a phone", async ({ page }, 
   await page.getByRole("button", { name: "Close privacy policy" }).tap();
   await page.getByRole("checkbox").check();
   await page.getByRole("textbox", { name: "Email address" }).fill("user@example.com");
-  await page.getByRole("button", { name: "Send code" }).tap();
+  await page.getByRole("button", { name: "Email me a sign-in code" }).tap();
   await page.getByLabel("Email code", { exact: true }).fill("12345678");
   await page.getByRole("button", { name: "Verify code" }).tap();
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
@@ -34,7 +34,7 @@ test.describe("mobile planner", () => {
     await page.getByRole("textbox", { name: "Why are you stopping?" }).fill("Stretch break");
     await page.getByRole("button", { name: "Save reason", exact: true }).tap();
     await expect(page.locator("#focus-timer")).toHaveClass(/is-paused/);
-    await page.getByRole("button", { name: "Profile", exact: true }).tap();
+    await visitProfile(page);
     await expect(page.locator(".profile-page")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });

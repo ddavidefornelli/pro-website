@@ -2,6 +2,8 @@ import { createEffect, For, onCleanup, onMount, untrack } from "solid-js";
 import { NAVIGATION_VIEWS, VIEW_LABELS } from "../constants";
 import type { PlannerState } from "../create-planner";
 
+const VIEW_SHORTCUTS = { today: "T", focus: "F", tomorrow: "M", habits: "O" };
+
 export function PlannerNavigation(props: { planner: PlannerState }) {
   let navigation!: HTMLElement;
   const planner = untrack(() => props.planner);
@@ -43,9 +45,7 @@ export function PlannerNavigation(props: { planner: PlannerState }) {
   return (
     <div class="navigation-header">
       <nav
-        ref={(element) => {
-          navigation = element;
-        }}
+        ref={(element) => (navigation = element)}
         aria-label="Main navigation"
         classList={{
           "today-complete-selected":
@@ -60,6 +60,7 @@ export function PlannerNavigation(props: { planner: PlannerState }) {
                 "day-complete": view === "today" && planner.todayComplete(),
               }}
               aria-label={VIEW_LABELS[view]}
+              aria-keyshortcuts={VIEW_SHORTCUTS[view]}
               aria-controls="planner-content"
               disabled={
                 planner.busy() || (planner.focusLocked() && view !== "focus")

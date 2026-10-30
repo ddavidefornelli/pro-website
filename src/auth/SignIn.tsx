@@ -100,9 +100,7 @@ export function SignIn(props: SignInProps) {
         <label>
           <span class="email-label-spacer">Email address</span>
           <input
-            ref={(element) => {
-              emailInput = element;
-            }}
+            ref={(element) => (emailInput = element)}
             aria-label="Email address"
             name="email"
             type="email"
@@ -127,9 +125,7 @@ export function SignIn(props: SignInProps) {
           Email code
           <div class="email-code-boxes">
             <input
-              ref={(element) => {
-                codeInput = element;
-              }}
+              ref={(element) => (codeInput = element)}
               class="otp-input"
               aria-label="Email code"
               name="code"

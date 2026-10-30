@@ -1,15 +1,44 @@
-import { For, Show, untrack } from "solid-js";
+import {
+  createMemo,
+  createResource,
+  For,
+  Index,
+  Match,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js";
 import type { PlanningClient } from "../api";
 import { PLANNER_LIMITS } from "../constants";
 import type { PlannerState } from "../create-planner";
-import { formatDuration } from "../time";
+import {
+  formatClock,
+  formatDayHeading,
+  formatMinutes,
+  greeting,
+  summarizeDay,
+} from "../quick-entry";
+import type { Hints } from "../hints";
+import { formatDuration, previousDay } from "../time";
 import { EstimateDial } from "./EstimateDial";
 import { TaskForm } from "./TaskForm";
 import { TaskTitle } from "./TaskTitle";
 
+const STARTERS = [
+  { outcome: "Clear my inbox", minutes: 20 },
+  { outcome: "Deep work on my main project", minutes: 60 },
+  { outcome: "Plan the week ahead", minutes: 30 },
+] as const;
+const DESKTOP_QUERY = "(hover: hover) and (min-width: 760px)";
+
 export function PlanView(props: {
   planner: PlannerState;
   client: PlanningClient;
+  hints: Hints;
+  firstRun: boolean;
+  guest?: boolean;
+  onSignIn: () => void;
+  onShortcuts: () => void;
 }) {
   const planner = untrack(() => props.planner);
   const tomorrow = () => planner.view() === "tomorrow";
@@ -22,14 +51,172 @@ export function PlanView(props: {
     const [year, month, date] = day().split("-");
     return `${date}/${month}/${year?.slice(-2)}`;
   };
+  const summary = createMemo(() => summarizeDay(tasks(), planner.now()));
+  const desktop = window.matchMedia(DESKTOP_QUERY).matches;
+  const completedTotal = () =>
+    planner.data()?.completions.reduce((sum, entry) => sum + entry.count, 0) ??
+    0;
+  const everCompleted = () => completedTotal() > 0;
+  const yesterdayCount = () => {
+    const data = planner.data();
+    if (!data) return 0;
+    const yesterday = previousDay(data.today);
+    return (
+      data.completions.find((entry) => entry.day === yesterday)?.count ?? 0
+    );
+  };
+  const nextTaskId = () =>
+    tomorrow() || planner.data()?.activeTask
+      ? null
+      : (tasks().find((task) => task.status === "planned")?.id ?? null);
+  const firstPlan = () => props.firstRun && !tomorrow() && !tasks().length;
+  const eveningId = () => `evening:${planner.data()?.today}` as const;
+  const hint = createMemo(() => {
+    const data = planner.data();
+    if (tomorrow() || !data) return null;
+    if (
+      completedTotal() > 0 &&
+      completedTotal() <= 3 &&
+      data.todayTasks.some((task) => task.status === "completed") &&
+      !props.hints.seen("progress")
+    )
+      return props.guest ? "sync" : "progress";
+    if (nextTaskId() && !everCompleted() && !props.hints.seen("start"))
+      return "start";
+    if (
+      new Date(planner.now() * 1000).getHours() >= 17 &&
+      !planner.todayComplete() &&
+      data.canPlanTomorrow &&
+      !data.tomorrowTasks.length &&
+      !props.hints.seen(eveningId())
+    )
+      return "evening";
+    return null;
+  });
+  const showShortcutHint = () =>
+    desktop && props.hints.visits() >= 3 && !props.hints.seen("shortcuts");
+  const create = (outcome: string, minutes: number) =>
+    planner.mutate(() => props.client.create(outcome, day(), minutes));
+  const openSlots = () =>
+    Math.max(0, PLANNER_LIMITS.tasksPerDay - tasks().length);
+  // Tomorrow's proposals come from today's plan, so refresh them when it changes.
+  const sourceVersion = () =>
+    tomorrow()
+      ? (planner.data()?.todayTasks ?? [])
+          .map((task) => `${task.outcome}\u0000${task.status}`)
+          .join("\u0001")
+      : "";
+  const suggestionKey = () =>
+    props.guest || !day()
+      ? undefined
+      : `${planner.view()}|${day()}|${sourceVersion()}`;
+  const [suggested] = createResource(suggestionKey, async (key) => ({
+    key,
+    items: await props.client.suggestTasks(
+      tomorrow() ? "tomorrow" : "today",
+      day(),
+      sourceVersion(),
+    ),
+  }));
+  const suggestions = () => {
+    const loaded = suggested.latest;
+    if (
+      !loaded ||
+      firstPlan() ||
+      !openSlots() ||
+      loaded.key !== suggestionKey()
+    )
+      return [];
+    const planned = new Set(
+      tasks().map((task) => task.outcome.trim().toLocaleLowerCase()),
+    );
+    return loaded.items
+      .filter((item) => !planned.has(item.outcome.trim().toLocaleLowerCase()))
+      .slice(0, openSlots());
+  };
+  const status = () => {
+    const { completed, remainingSeconds, focusedSeconds, finishAt } = summary();
+    if (!tasks().length) {
+      if (tomorrow()) return "Choose up to three outcomes before you sign off.";
+      if (firstPlan()) return "What would make today a good day?";
+      const yesterday = yesterdayCount();
+      return yesterday
+        ? `Yesterday you finished ${yesterday}. What are today\u2019s three?`
+        : "Choose up to three outcomes that would make today a good day.";
+    }
+    if (tomorrow())
+      return `${tasks().length} of ${PLANNER_LIMITS.tasksPerDay} planned\u00a0· ${formatMinutes(remainingSeconds)} of focus`;
+    if (finishAt === null)
+      return `All done\u00a0· ${formatMinutes(focusedSeconds)} focused`;
+    return `${completed} of ${tasks().length} done\u00a0· ${formatMinutes(remainingSeconds)} left\u00a0· finish around ${formatClock(finishAt)}`;
+  };
 
   return (
     <>
-      <div class="plan-heading">
-        <time class="plan-date" dateTime={day()}>
-          {dayLabel()}
-        </time>
-      </div>
+      <header class="plan-heading">
+        <div class="plan-topline">
+          <p class="plan-eyebrow">
+            {tomorrow() ? "Tomorrow" : greeting(planner.now())}
+            <span aria-hidden="true"> · </span>
+            <time class="plan-date" dateTime={day()} title={dayLabel()}>
+              {formatDayHeading(day())}
+            </time>
+          </p>
+          <Show when={props.guest}>
+            <button
+              type="button"
+              class="text-button"
+              aria-label="Sign in to sync"
+              onClick={() => props.onSignIn()}
+            >
+              Sign in
+            </button>
+          </Show>
+        </div>
+        <p
+          class="plan-summary"
+          classList={{ "is-first-plan": firstPlan() }}
+          aria-live="polite"
+        >
+          {status()}
+        </p>
+        <ol class="plan-slots" aria-hidden="true">
+          <Index each={Array.from({ length: PLANNER_LIMITS.tasksPerDay })}>
+            {(_, index) => (
+              <li
+                classList={{
+                  "is-planned": index < tasks().length,
+                  "is-done":
+                    !tomorrow() && tasks()[index]?.status === "completed",
+                  "is-active": tasks()[index]?.status === "active",
+                }}
+              />
+            )}
+          </Index>
+        </ol>
+      </header>
+      <Show when={firstPlan()}>
+        <section class="starters" aria-label="Starting ideas">
+          <p class="muted">
+            Pick a starting point, or write your own below. Add a time like{" "}
+            <q>45m</q> to set the estimate.
+          </p>
+          <div class="starter-list">
+            <For each={STARTERS}>
+              {(starter) => (
+                <button
+                  type="button"
+                  disabled={planner.busy()}
+                  onClick={() => void create(starter.outcome, starter.minutes)}
+                >
+                  <span>{starter.outcome}</span>
+                  <span class="muted">{starter.minutes} min</span>
+                </button>
+              )}
+            </For>
+          </div>
+        </section>
+      </Show>
       <ul class="task-list">
         <For each={tasks()}>
           {(task) => (
@@ -37,9 +224,13 @@ export function PlanView(props: {
               class="task"
               classList={{
                 "is-completed": !tomorrow() && task.status === "completed",
+                "is-next": task.id === nextTaskId(),
               }}
             >
               <div class="task-details">
+                <Show when={task.id === nextTaskId()}>
+                  <p class="up-next">Up next</p>
+                </Show>
                 <TaskTitle
                   task={task}
                   heading="h2"
@@ -79,6 +270,7 @@ export function PlanView(props: {
                   type="button"
                   disabled={planner.busy() || !!planner.data()?.activeTask}
                   onClick={() => {
+                    props.hints.dismiss("start");
                     void planner.mutate(async () => {
                       await props.client.start(task.id);
                       planner.visit("focus");
@@ -101,13 +293,130 @@ export function PlanView(props: {
           )}
         </For>
       </ul>
-      <Show when={tasks().length < PLANNER_LIMITS.tasksPerDay}>
+      <Show when={suggestions().length}>
+        <section
+          class="starters suggestions"
+          aria-label={`Suggested from ${tomorrow() ? "today" : "yesterday"}`}
+        >
+          <p class="muted">From {tomorrow() ? "today" : "yesterday"}</p>
+          <div class="starter-list">
+            <For each={suggestions()}>
+              {(item) => (
+                <button
+                  type="button"
+                  disabled={planner.busy()}
+                  onClick={() =>
+                    void create(item.outcome, item.estimatedMinutes)
+                  }
+                >
+                  <span>{item.outcome}</span>
+                  <span class="muted">
+                    {item.basis === "carry_over" ? "Unfinished · " : ""}
+                    {item.estimatedMinutes} min
+                  </span>
+                </button>
+              )}
+            </For>
+          </div>
+        </section>
+      </Show>
+      <Show when={openSlots() > 0}>
         <TaskForm
           busy={planner.busy()}
-          onCreate={(outcome, minutes) =>
-            planner.mutate(() => props.client.create(outcome, day(), minutes))
-          }
+          autofocus={firstPlan() && desktop}
+          onCreate={create}
         />
+      </Show>
+      <Switch>
+        <Match when={hint() === "start"}>
+          <aside class="hint-card" aria-label="Tip">
+            <p>
+              Start when you’re ready.{" "}
+              {desktop
+                ? "Press Space to pause, and write a line about why."
+                : "Tap the timer to pause."}
+            </p>
+            <button type="button" onClick={() => props.hints.dismiss("start")}>
+              Got it
+            </button>
+          </aside>
+        </Match>
+        <Match when={hint() === "progress"}>
+          <aside class="hint-card" aria-label="Tip">
+            <p>Nice work. Your streak and weekly review live in Overview.</p>
+            <button
+              type="button"
+              class="primary-button"
+              onClick={() => {
+                props.hints.dismiss("progress");
+                planner.visit("habits");
+              }}
+            >
+              Open Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => props.hints.dismiss("progress")}
+            >
+              Got it
+            </button>
+          </aside>
+        </Match>
+        <Match when={hint() === "sync"}>
+          <aside class="hint-card" aria-label="Save your progress">
+            <p>Nice work. Keep this progress on every device.</p>
+            <button
+              type="button"
+              class="primary-button"
+              onClick={() => props.onSignIn()}
+            >
+              Save &amp; sync
+            </button>
+            <button
+              type="button"
+              onClick={() => props.hints.dismiss("progress")}
+            >
+              Not now
+            </button>
+          </aside>
+        </Match>
+        <Match when={hint() === "evening"}>
+          <aside class="hint-card" aria-label="Evening planning">
+            <p>Evening already. Set up tomorrow while today is still fresh.</p>
+            <button
+              type="button"
+              class="primary-button"
+              onClick={() => planner.visit("tomorrow")}
+            >
+              Plan tomorrow
+            </button>
+            <button
+              type="button"
+              onClick={() => props.hints.dismiss(eveningId())}
+            >
+              Not tonight
+            </button>
+          </aside>
+        </Match>
+      </Switch>
+      <Show when={showShortcutHint()}>
+        <p class="shortcut-hint">
+          <button
+            type="button"
+            class="text-button"
+            onClick={() => props.onShortcuts()}
+          >
+            Press <kbd>?</kbd> for keyboard shortcuts
+          </button>
+          <button
+            type="button"
+            class="text-button"
+            aria-label="Hide shortcut tip"
+            onClick={() => props.hints.dismiss("shortcuts")}
+          >
+            ×
+          </button>
+        </p>
       </Show>
     </>
   );

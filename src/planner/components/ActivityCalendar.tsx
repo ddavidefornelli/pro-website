@@ -15,7 +15,7 @@ import {
 } from "../activity-calendar-model";
 import { PLANNER_LIMITS } from "../constants";
 
-export interface ActivityCalendarProps {
+interface ActivityCalendarProps {
   today: string;
   completions: readonly Completion[];
 }
@@ -28,7 +28,7 @@ const dateLabel = new Intl.DateTimeFormat("en", {
 });
 
 /** A reusable intensity swatch, shared by the chart and its legend. */
-export function ActivitySwatch(
+function ActivitySwatch(
   props: { count: number } & JSX.HTMLAttributes<HTMLSpanElement>,
 ) {
   const [local, attributes] = splitProps(props, ["count", "class"]);
@@ -40,7 +40,7 @@ export function ActivitySwatch(
   );
 }
 
-export function ActivityLegend() {
+function ActivityLegend() {
   return (
     <div
       class="activity-legend"
@@ -84,7 +84,7 @@ function ActivityDay(props: {
 }
 
 /** Owns roving focus; date calculation and day presentation stay independent. */
-export function ActivityGrid(props: {
+function ActivityGrid(props: {
   calendar: CalendarYear;
   today: string;
   startMonth: number;

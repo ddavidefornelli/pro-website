@@ -1,53 +1,34 @@
-import { test, expect, AUTH_KEY, session } from "./helpers/browser";
+import { test, expect, AUTH_KEY, openSignIn, showSignIn, session } from "./helpers/browser";
 import { PRIVACY_POLICY_VERSION, PRIVACY_ACKNOWLEDGEMENT_KEY } from "../src/planner/privacy-state";
 
-test("home is signup, with an unchecked notice and no site header", async ({ page, backend }) => {
+test("home opens the guest planner; sign-in requires an unchecked notice", async ({ page, backend }) => {
   await page.goto("/");
   await expect(page).toHaveTitle("prune — Your day. Three priorities.");
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Email address" })).toHaveCount(0);
+  expect(backend.requests).toEqual([]);
+  await showSignIn(page);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("DO LESS.ACHIEVE MORE.");
-  await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
   await expect(page.getByRole("checkbox")).not.toBeChecked();
-  await expect(page.getByRole("button", { name: "Send code" })).toBeVisible();
-  await expect(page.locator(".site-header")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Install for Mac" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Email me a sign-in code" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toHaveCount(0);
   expect(backend.requests).toEqual([]);
   expect(await page.locator("script[src*='googletagmanager'],script[src*='goatcounter'],script[src*='vercel-scripts']").count()).toBe(0);
 });
 
-test("Google sign-in requires notice acceptance but not an email address", async ({ page, context, backend }) => {
-  let authorization: URL | undefined;
-  await context.route("**/auth/v1/authorize?**", async (route) => {
-    authorization = new URL(route.request().url());
-    await route.fulfill({ contentType: "text/html", body: "Google authorization fixture" });
-  });
-  await page.goto("/");
-  const google = page.getByRole("button", { name: "Sign in with Google", exact: true });
-  await google.click();
-  expect(authorization).toBeUndefined();
-  expect(backend.requests).toHaveLength(0);
-  await page.getByRole("checkbox").check();
-  await google.click();
-  await expect.poll(() => authorization?.searchParams.get("provider")).toBe("google");
-  expect(authorization!.searchParams.get("code_challenge_method")).toBe("s256");
-  expect(authorization!.searchParams.get("code_challenge")).toBeTruthy();
-  expect(authorization!.searchParams.get("redirect_to")).toBe("http://127.0.0.1:4173/?oauth=google");
-  expect(backend.requests.some((request) => request.path === "/auth/v1/otp")).toBe(false);
-});
-
 test("email-code sign-in handles invalid codes then restores the session without another email", async ({ page, backend }) => {
-  await page.goto("/");
+  await openSignIn(page);
   await page.getByRole("textbox", { name: "Email address" }).fill("user@example.com");
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
-  await page.getByRole("button", { name: "Send code", exact: true }).click();
+  await page.getByRole("button", { name: "Email me a sign-in code", exact: true }).click();
   expect(backend.requests).toHaveLength(0);
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Send code", exact: true }).click();
+  await page.getByRole("button", { name: "Email me a sign-in code", exact: true }).click();
   const code = page.getByLabel("Email code", { exact: true });
   await expect(code).toHaveAttribute("autocomplete", "one-time-code");
   await expect(page.locator(".email-code-digit")).toHaveCount(8);
   await expect(page.locator("#signup-title")).toBeHidden();
   await expect(page.locator(".auth-description")).toBeHidden();
-  await expect(page.getByText("Check your spam folder", { exact: false })).toHaveCount(0);
   await code.fill("00000000");
   await expect(page.locator(".email-code-digit")).toHaveText(Array(8).fill("0"));
   await page.getByRole("button", { name: "Verify code", exact: true }).click();
@@ -59,17 +40,19 @@ test("email-code sign-in handles invalid codes then restores the session without
   const requests = backend.requests.filter((request) => request.path === "/auth/v1/verify");
   expect(requests).toHaveLength(2);
   expect(requests[1].body).toMatchObject({ email: "user@example.com", token: "12345678", type: "email" });
-  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
+  // Signing in returns to the page it started from, here Overview.
+  await expect(page.getByRole("main", { name: "Overview", exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Signed in." })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
   expect(backend.requests.filter((request) => request.path === "/auth/v1/otp")).toHaveLength(1);
   const saved = await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(localStorage))));
-  expect(saved).not.toContain("12345678"); // One-time codes are not persisted.
+  expect(saved).not.toContain("12345678");
   const plannerRequests = backend.requests.filter((request) => request.path.includes("/rpc/") || request.path.includes("/functions/"));
   expect(JSON.stringify(plannerRequests.map((request) => request.body))).not.toContain("12345678");
 });
 
-test("Google callback exchanges the code and removes it from the URL", async ({ page, backend }) => {
+test("an existing Google callback exchanges the code and removes it from the URL", async ({ page, backend }) => {
   await page.addInitScript(({ key, version }) => {
     localStorage.setItem(key, JSON.stringify({ version, acknowledgedAt: new Date().toISOString() }));
   }, { key: PRIVACY_ACKNOWLEDGEMENT_KEY, version: PRIVACY_POLICY_VERSION });
@@ -83,13 +66,15 @@ test("Google callback exchanges the code and removes it from the URL", async ({ 
   expect(backend.requests.some((request) => request.path === "/auth/v1/user")).toBe(true);
 });
 
-test("Google cancellation clears callback parameters and shows a safe error", async ({ page, backend }) => {
+test("callback cancellation clears private parameters and leaves guest planning usable", async ({ page, backend }) => {
   await page.addInitScript(({ key, version }) => {
     localStorage.setItem(key, JSON.stringify({ version, acknowledgedAt: new Date().toISOString() }));
   }, { key: PRIVACY_ACKNOWLEDGEMENT_KEY, version: PRIVACY_POLICY_VERSION });
   await page.goto("/?oauth=google&error=access_denied&error_description=private-diagnostic");
-  await expect(page.getByRole("alert")).toContainText("Google sign-in was cancelled");
   await expect(page).toHaveURL("http://127.0.0.1:4173/");
+  await showSignIn(page);
+  await expect(page.getByRole("alert")).toContainText("Sign-in was cancelled");
+  await expect(page.locator("body")).not.toContainText("private-diagnostic");
   expect(backend.requests).toHaveLength(0);
 });
 
@@ -101,21 +86,20 @@ test("privacy storage failure sends no account request and does not claim signup
       return original.call(this, key, value);
     };
   });
-  await page.goto("/");
+  await openSignIn(page);
   await page.getByRole("textbox", { name: "Email address" }).fill("user@example.com");
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Send code" }).click();
+  await page.getByRole("button", { name: "Email me a sign-in code" }).click();
   await expect(page.getByRole("alert")).toContainText("No sign-in request was sent");
   expect(backend.requests).toHaveLength(0);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("DO LESS.ACHIEVE MORE.");
 });
 
-test("an outdated notice gates even a saved session, and the full policy is available before sign-in", async ({ page, backend }) => {
+test("an outdated notice gates saved sessions and the full policy is available before sign-in", async ({ page, backend }) => {
   await page.addInitScript(({ authKey, savedSession, privacyKey }) => {
     localStorage.setItem(authKey, JSON.stringify(savedSession));
     localStorage.setItem(privacyKey, JSON.stringify({ version: "privacy-old", acknowledgedAt: new Date().toISOString() }));
   }, { authKey: AUTH_KEY, savedSession: session(), privacyKey: PRIVACY_ACKNOWLEDGEMENT_KEY });
-  await page.goto("/");
+  await openSignIn(page);
   await expect(page.getByRole("checkbox")).not.toBeChecked();
   await page.getByRole("button", { name: "Terms & Privacy", exact: true }).first().click();
   await expect(page.getByRole("dialog")).toContainText("browser's localStorage");
@@ -126,16 +110,16 @@ test("an outdated notice gates even a saved session, and the full policy is avai
 
 test("failed sign-in stays on the email form without exposing upstream errors", async ({ page, backend }) => {
   backend.failSignIn = true;
-  await page.goto("/");
+  await openSignIn(page);
   await page.getByRole("textbox", { name: "Email address" }).fill("user@example.com");
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Send code" }).click();
+  await page.getByRole("button", { name: "Email me a sign-in code" }).click();
   await expect(page.getByRole("alert")).toContainText(/unavailable|Could not reach/);
-  await expect(page.getByLabel("Email address", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send code" })).toBeEnabled();
+  await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Email me a sign-in code" })).toBeEnabled();
 });
 
-test("the existing direct download page still works without account services", async ({ page, backend }) => {
+test("the existing direct download page works without account services", async ({ page, backend }) => {
   const downloadPromise = page.waitForEvent("download");
   await page.goto("/download");
   const download = await downloadPromise;
@@ -146,17 +130,16 @@ test("the existing direct download page still works without account services", a
 });
 
 test("signup fits narrow phones and scrolls naturally in short landscape windows", async ({ page }) => {
-  await page.goto("/");
+  await openSignIn(page);
   for (const viewport of [
     { width: 280, height: 568 }, { width: 320, height: 568 }, { width: 375, height: 667 },
     { width: 390, height: 844 }, { width: 430, height: 932 }, { width: 568, height: 320 },
     { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1440, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
-    const width = await page.evaluate(() => document.documentElement.scrollWidth);
-    expect(width, `No horizontal overflow at ${viewport.width}×${viewport.height}`).toBeLessThanOrEqual(viewport.width);
-    await page.getByRole("button", { name: "Send code" }).evaluate((button) => button.scrollIntoView({ block: "center" }));
-    await expect(page.getByRole("button", { name: "Send code" })).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `No overflow at ${viewport.width}×${viewport.height}`).toBeLessThanOrEqual(viewport.width);
+    await page.getByRole("button", { name: "Email me a sign-in code" }).evaluate((button) => button.scrollIntoView({ block: "center" }));
+    await expect(page.getByRole("button", { name: "Email me a sign-in code" })).toBeInViewport({ ratio: 1 });
     expect(await page.getByRole("textbox", { name: "Email address" }).evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
     await page.evaluate(() => window.scrollTo(0, 0));
   }

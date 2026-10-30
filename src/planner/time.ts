@@ -19,6 +19,13 @@ export function localDay(at: number, timezone: string): string {
     .join("-");
 }
 
+/** Date-key arithmetic is independent of daylight-saving changes. */
+export function nextDay(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS)
+    .toISOString()
+    .slice(0, 10);
+}
+
 export function formatDuration(seconds: number): string {
   return [
     Math.floor(seconds / 3600),
@@ -27,4 +34,10 @@ export function formatDuration(seconds: number): string {
   ]
     .map((value) => String(value).padStart(2, "0"))
     .join(":");
+}
+
+export function previousDay(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) - DAY_MS)
+    .toISOString()
+    .slice(0, 10);
 }

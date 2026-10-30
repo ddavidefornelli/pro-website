@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
-import { createPlannerHandler, GatewayError } from '../server/planner-handler.ts';
+import { createPlannerHandler } from '../server/planner-handler.ts';
+import { ApiError } from '../server/http.ts';
 import { resolveClerkIdentity } from '../server/clerk-identity.ts';
 import { clerkOrigin } from '../src/planner/clerk-config.ts';
 
@@ -19,7 +20,7 @@ test('gateway never chooses an owner from caller-supplied planner arguments', as
   assert.equal((await result.json()).account.userId, owner);
 });
 test('gateway rejects anonymous access, foreign origins, invalid commands, and oversized bodies', async () => {
-  const denied = createPlannerHandler(deps({ authenticate: async () => { throw new GatewayError(401, 'unauthorized', 'Sign in.'); } }));
+  const denied = createPlannerHandler(deps({ authenticate: async () => { throw new ApiError(401, 'unauthorized', 'Sign in.'); } }));
   assert.equal((await denied(request({ command: 'auth_status', args: {} }))).status, 401);
   const handler = createPlannerHandler(deps());
   assert.equal((await handler(request({ command: 'auth_status', args: {} }, { Origin: 'https://evil.test' }))).status, 403);

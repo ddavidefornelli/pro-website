@@ -1,6 +1,6 @@
 import { test as cspTest } from "@playwright/test";
 import { integrity, securityHeaders } from "../scripts/security-policy.ts";
-import { test, expect, openPlanner, addTask, synced, AUTH_KEY, QUEUE_KEY, USER_ID, PROJECT, dashboard, review } from "./helpers/browser";
+import { test, expect, openPlanner, visitProfile, addTask, synced, AUTH_KEY, QUEUE_KEY, USER_ID, PROJECT, dashboard, review } from "./helpers/browser";
 
 test.use({ signedIn: true });
 
@@ -90,7 +90,11 @@ cspTest("production CSP blocks injected code, styles and unapproved backend conn
   const policy = response!.headers()["content-security-policy"]!;
   expect(policy).toMatch(/script-src 'sha384-[A-Za-z0-9+/]{64}'/);
   expect(policy).not.toContain("script-src 'self'");
-  expect(policy).not.toContain("*");
+  // Optional, consent-gated analytics has narrowly reviewed domain wildcards;
+  // no unrestricted source or backend wildcard may enter the policy.
+  expect([...new Set(policy.split(/[;\s]+/).filter((source) => source.includes("*")))].sort()).toEqual([
+    "https://*.contentsquare.com", "https://*.contentsquare.net",
+  ]);
   expect(response!.headers()["cache-control"]).toContain("no-store");
   await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute("content", policy.replace("; frame-ancestors 'none'", ""));
   await page.evaluate(async () => {
@@ -242,8 +246,7 @@ test("a tampered local session identity cannot unlock another account's cached p
     localStorage.setItem(queueKey, JSON.stringify({ version: 1, base: cached, savedAt: Date.now() / 1000, pending: [], blocked: null }));
   }, { authKey: AUTH_KEY, queueKey: QUEUE_KEY.replace(USER_ID, otherId), otherId, cached });
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Send code", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation")).toHaveCount(0);
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
   await expect(page.locator("body")).not.toContainText(privateTitle);
   expect(backend.requests.some((request) => request.path === "/auth/v1/user")).toBe(true);
   expect(backend.requests.some((request) => request.path.includes("/rpc/"))).toBe(false);
@@ -256,8 +259,7 @@ test("a server-rejected saved session never displays the account cache", async (
   await context.route(`${PROJECT}/auth/v1/user`, (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ msg: "Sensitive upstream diagnostic", code: "bad_jwt" }) }));
   backend.requests.length = 0;
   await page.reload();
-  await expect(page.getByRole("button", { name: "Send code", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation")).toHaveCount(0);
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("A private cached outcome");
   await expect(page.locator("body")).not.toContainText("Sensitive upstream diagnostic");
   expect(backend.requests.some((request) => request.path.includes("/rpc/"))).toBe(false);
@@ -270,12 +272,11 @@ test("sign-out and browser back do not restore the planner or credentials", asyn
   await synced(page);
   await page.goto("/?history=1");
   await expect(page.getByRole("navigation")).toBeVisible();
-  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await visitProfile(page);
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Send code", exact: true })).toBeVisible();
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
   await page.goBack();
-  await expect(page.getByRole("button", { name: "Send code", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation")).toHaveCount(0);
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("A private signed-out task");
   expect(await page.evaluate((key) => localStorage.getItem(key), AUTH_KEY)).toBeNull();
   // This is intentional recovery behavior, not encryption/erasure of site data.

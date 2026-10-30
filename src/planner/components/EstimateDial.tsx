@@ -59,9 +59,7 @@ export function EstimateDial(props: EstimateDialProps) {
   return (
     <div class={`estimate-control${props.class ? ` ${props.class}` : ""}`}>
       <div
-        ref={(element) => {
-          dial = element;
-        }}
+        ref={(element) => (dial = element)}
         class="estimate-dial"
         classList={{ "is-turning": turning() }}
         tabIndex={0}

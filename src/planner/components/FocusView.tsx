@@ -1,5 +1,7 @@
 import {
+  createEffect,
   createMemo,
+  onCleanup,
   createSignal,
   createUniqueId,
   Show,
@@ -9,6 +11,7 @@ import { Dialog } from "../../components/Dialog";
 import type { PlanningClient } from "../api";
 import { PLANNER_LIMITS } from "../constants";
 import type { PlannerState } from "../create-planner";
+import type { Hints } from "../hints";
 import { trackedSeconds } from "../task-model";
 import { formatDuration } from "../time";
 import { TaskTitle } from "./TaskTitle";
@@ -19,6 +22,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 export function FocusView(props: {
   planner: PlannerState;
   client: PlanningClient;
+  hints: Hints;
 }) {
   const planner = untrack(() => props.planner);
   const task = () => planner.data()?.activeTask;
@@ -36,6 +40,16 @@ export function FocusView(props: {
       : 0;
   });
   const displayTime = () => formatDuration(remaining());
+
+  // A live tab title keeps the session visible from any other tab.
+  const baseTitle = document.title;
+  onCleanup(() => (document.title = baseTitle));
+  createEffect(() => {
+    const active = task();
+    document.title = active
+      ? `${paused() ? "Paused" : displayTime()} · ${active.outcome}`
+      : baseTitle;
+  });
 
   async function toggleTimer(): Promise<void> {
     const active = task();
@@ -161,6 +175,7 @@ export function FocusView(props: {
                   if (!event.currentTarget.reportValidity()) return;
                   void planner.mutate(async () => {
                     await props.client.savePauseReason(active().id, reason());
+                    props.hints.dismiss("pause");
                     setReason("");
                     planner.setPauseReasonOpen(false);
                   });
@@ -183,6 +198,11 @@ export function FocusView(props: {
                 </label>
                 <p class="muted">
                   The timer is paused while you write your reason.
+                  <Show when={!props.hints.seen("pause")}>
+                    {" "}
+                    One honest line is enough; your weekly review uses these to
+                    spot what pulls you away.
+                  </Show>
                 </p>
                 <button type="submit" disabled={planner.busy()}>
                   Save reason

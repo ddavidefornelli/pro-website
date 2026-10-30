@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isDayComplete, trackedSeconds } from "../src/planner/task-model.ts";
 import { onboardingKey, shouldOfferOnboarding } from "../src/planner/onboarding.ts";
-import { profileStats } from "../src/profile/profile-stats.ts";
+import { profileStats, todayFocusSeconds } from "../src/profile/profile-stats.ts";
 import { reviewCountdown } from "../src/reviews/review-countdown.ts";
 import { averageTaskTiming, completedTaskTimings } from "../src/shared/task-timing.ts";
 import { dashboard, persistence } from "./helpers/queue.mjs";
@@ -35,6 +35,38 @@ test("profile statistics use calendar dates across month boundaries and ignore f
   data.today = "2026-03-02";
   data.completions.pop();
   assert.equal(profileStats(data).currentStreak, 0);
+});
+
+test("profile streaks handle unordered history, duplicate dates, gaps, and daylight-saving boundaries", () => {
+  const data = dashboard(Date.parse("2026-03-10T12:00:00Z") / 1000);
+  data.completions = [
+    { day: "2026-03-03", count: 2 }, { day: "2026-02-28", count: 1 },
+    { day: "2026-03-01", count: 3 }, { day: "2026-03-02", count: 1 },
+    { day: "2026-03-04", count: 0 }, { day: "2026-03-06", count: 1 },
+    { day: "2026-03-07", count: 2 }, { day: "2026-03-07", count: 1 },
+    { day: "2026-03-08", count: 1 }, { day: "2026-03-09", count: 1 },
+    { day: "2026-03-11", count: 99 }, { day: "2026-02-01", count: 1 },
+  ];
+  const expected = {
+    totalCompleted: 14, activeDays: 9, currentStreak: 4, bestStreak: 4,
+    todayCompleted: 0, weekCompleted: 1, monthCompleted: 12,
+    todayFocusSeconds: 0, todayEstimatedMinutes: 0,
+  };
+  assert.deepEqual(profileStats(data), expected);
+  data.completions.reverse();
+  assert.deepEqual(profileStats(data), expected);
+});
+
+test("live focus totals ignore history and exclude pauses and clock rollback", () => {
+  const data = dashboard();
+  data.todayTasks = [
+    { actualSeconds: 10, startedAt: data.serverNow - 30 },
+    { actualSeconds: 70, startedAt: null },
+  ];
+  Object.defineProperty(data, "completions", { get() { assert.fail("Live timing must not scan completion history"); } });
+  assert.equal(todayFocusSeconds(data), 110);
+  assert.equal(todayFocusSeconds(data, data.serverNow + 60), 170);
+  assert.equal(todayFocusSeconds(data, data.serverNow - 60), 80);
 });
 
 test("onboarding is scoped to an account and never offered over existing history", () => {

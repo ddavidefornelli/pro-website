@@ -3,7 +3,7 @@ import { ActivityCalendar } from "../planner/components/ActivityCalendar";
 import type { PlannerState } from "../planner/create-planner";
 import { ReviewPreferences } from "../reviews/ReviewPreferences";
 import type { WeeklyReviewState } from "../reviews/create-weekly-review";
-import { profileStats } from "./profile-stats";
+import { profileStats, todayFocusSeconds } from "./profile-stats";
 
 function focusMinutes(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -36,7 +36,7 @@ export function Profile(props: {
   const planner = untrack(() => props.planner);
   const stats = createMemo(() => {
     const data = planner.data();
-    return data ? profileStats(data, planner.now()) : null;
+    return data ? profileStats(data) : null;
   });
   return (
     <section class="profile-page" aria-labelledby="profile-heading">
@@ -71,7 +71,12 @@ export function Profile(props: {
                   "Completed this month",
                   value().monthCompleted.toLocaleString(),
                 ],
-                ["Today’s task focus", focusMinutes(value().todayFocusSeconds)],
+                [
+                  "Today’s task focus",
+                  focusMinutes(
+                    todayFocusSeconds(planner.data()!, planner.now()),
+                  ),
+                ],
               ]}
             />
             <p class="muted">

@@ -8,6 +8,7 @@ import {
   onMount,
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
+import { onWake } from "../shared/on-wake.ts";
 import type { PlanningClient } from "./api";
 import type { Dashboard } from "./types";
 import { PLANNER_LIMITS, POLLING, type PlannerView } from "./constants.ts";
@@ -126,34 +127,19 @@ export function createPlanner(client: PlanningClient) {
     return success && !disposed;
   }
 
-  async function signOut(): Promise<void> {
+  async function endSession(action: "signOut" | "delete"): Promise<void> {
     if (busy()) return;
-    if (
-      client.pendingCount &&
-      !window.confirm(
-        "Some changes have not synced. They will stay on this device for this account, but will not sync while signed out. Sign out anyway?",
-      )
-    )
-      return;
-    setAccountAction("signOut");
+    const confirmation =
+      action === "delete"
+        ? "Delete your account? You will lose access immediately. Your account and data will be marked for deletion and kept for 30 days before manual removal. Unsynced changes will not be uploaded. This cannot be undone in the app."
+        : client.pendingCount
+          ? "Some changes have not synced. They will stay on this device for this account, but will not sync while signed out. Sign out anyway?"
+          : null;
+    if (confirmation && !window.confirm(confirmation)) return;
+    setAccountAction(action);
     await mutate(async () => {
-      await client.signOut();
-      window.location.reload();
-    });
-    if (!disposed) setAccountAction(null);
-  }
-
-  async function deleteAccount(): Promise<void> {
-    if (busy()) return;
-    if (
-      !window.confirm(
-        "Delete your account? You will lose access immediately. Your account and data will be marked for deletion and kept for 30 days before manual removal. Unsynced changes will not be uploaded. This cannot be undone in the app.",
-      )
-    )
-      return;
-    setAccountAction("delete");
-    await mutate(async () => {
-      await client.deleteAccount();
+      if (action === "delete") await client.deleteAccount();
+      else await client.signOut();
       window.location.reload();
     });
     if (!disposed) setAccountAction(null);
@@ -169,6 +155,11 @@ export function createPlanner(client: PlanningClient) {
     await mutate(() => client.discardPending());
   }
 
+  onWake(() => {
+    setClock(Date.now());
+    void refresh();
+    void client.sync();
+  });
   onMount(() => {
     const queueChanged = () => {
       setSyncBlocked(client.syncBlocked);
@@ -176,25 +167,15 @@ export function createPlanner(client: PlanningClient) {
       if (next && !busy()) applyDashboard(next);
     };
     client.onQueueChange = queueChanged;
-    const wake = () => {
-      if (document.visibilityState === "hidden") return;
-      setClock(Date.now());
-      void refresh();
-      void client.sync();
-    };
     const timers = [
       window.setInterval(() => setClock(Date.now()), POLLING.clock),
       window.setInterval(() => {
         void refresh();
       }, POLLING.dashboard),
     ];
-    window.addEventListener("focus", wake);
-    document.addEventListener("visibilitychange", wake);
     onCleanup(() => {
       disposed = true;
       timers.forEach(window.clearInterval);
-      window.removeEventListener("focus", wake);
-      document.removeEventListener("visibilitychange", wake);
       if (client.onQueueChange === queueChanged)
         client.onQueueChange = () => {};
     });
@@ -224,8 +205,8 @@ export function createPlanner(client: PlanningClient) {
     accountAction,
     refresh,
     mutate,
-    signOut,
-    deleteAccount,
+    signOut: () => endSession("signOut"),
+    deleteAccount: () => endSession("delete"),
     discardPending,
   };
 }

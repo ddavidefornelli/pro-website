@@ -38,9 +38,10 @@ export function ReviewPreferences(props: {
             <summary>Weekly review settings</summary>
             <p class="muted">
               Weekly reviews run automatically using selected planner activity
-              processed by OpenAI. You can turn them off at any time without
-              affecting tasks or timers. See the Privacy Policy for data,
-              provider and retention details.
+              processed by OpenAI. While they are on, Today and Tomorrow also
+              suggest tasks from the previous day's plan. Turning reviews off
+              stops both, without affecting tasks or timers. See the Privacy
+              Policy for data, provider and retention details.
             </p>
             <PrivacyPolicyButton />
             <p class="muted">

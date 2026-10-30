@@ -1,6 +1,6 @@
 import { Clerk } from '@clerk/clerk-js/no-rhc';
-import { apiFetch } from './browser';
-import type { AuthStatus } from './api';
+import { apiFetch } from './api-fetch';
+import type { AuthStatus } from './types';
 import { webConfig } from './config';
 import { clerkOrigin } from './clerk-config';
 import { CloudError, httpError } from './http-error';

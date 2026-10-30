@@ -7,10 +7,12 @@ import {
 } from "solid-js";
 import { Dialog } from "../../components/Dialog";
 import { ESTIMATE, MOBILE_QUERY, PLANNER_LIMITS } from "../constants";
+import { formatMinutes, parseQuickEntry } from "../quick-entry";
 import { EstimateDial } from "./EstimateDial";
 
 interface TaskFormProps {
   busy: boolean;
+  autofocus?: boolean;
   onCreate: (outcome: string, minutes: number) => Promise<boolean>;
 }
 
@@ -25,9 +27,11 @@ export function TaskForm(props: TaskFormProps) {
   );
   const [estimating, setEstimating] = createSignal(false);
   const questionId = createUniqueId();
+  const parsed = () => parseQuickEntry(outcome());
   let input!: HTMLInputElement;
 
   onMount(() => {
+    if (props.autofocus) input.focus();
     const query = window.matchMedia(MOBILE_QUERY);
     const change = () => setMobile(query.matches);
     query.addEventListener("change", change);
@@ -36,7 +40,7 @@ export function TaskForm(props: TaskFormProps) {
 
   async function create(estimate: number): Promise<void> {
     if (props.busy) return;
-    if (await props.onCreate(outcome(), estimate)) {
+    if (await props.onCreate(parsed().outcome, estimate)) {
       setOutcome("");
       setMinutes(ESTIMATE.defaultMinutes);
       setMobileMinutes(ESTIMATE.defaultMinutes);
@@ -54,27 +58,45 @@ export function TaskForm(props: TaskFormProps) {
             outcome().trim() ? "" : "Please write an outcome for this task.",
           );
           if (!event.currentTarget.reportValidity() || props.busy) return;
-          if (mobile()) setEstimating(true);
+          const typed = parsed().minutes;
+          if (typed !== null) void create(typed);
+          else if (mobile()) setEstimating(true);
           else void create(minutes());
         }}
       >
         <label>
           <input
-            ref={(element) => {
-              input = element;
-            }}
+            ref={(element) => (input = element)}
             aria-label="Outcome"
             name="outcome"
             required
             maxLength={PLANNER_LIMITS.outcomeLength}
             placeholder="Add an outcome"
+            autocomplete="off"
+            enterkeyhint="done"
             value={outcome()}
             disabled={props.busy}
             onInput={(event) => {
               event.currentTarget.setCustomValidity("");
               setOutcome(event.currentTarget.value);
+              const typed = parsed().minutes;
+              if (typed !== null) setMinutes(typed);
             }}
           />
+          <Show
+            when={parsed().minutes}
+            fallback={
+              <kbd class="quick-entry-hint" aria-hidden="true">
+                N
+              </kbd>
+            }
+          >
+            {(typed) => (
+              <span class="quick-entry-chip" aria-live="polite">
+                {formatMinutes(typed() * 60)}
+              </span>
+            )}
+          </Show>
         </label>
         <Show when={!mobile()}>
           <div class="task-estimate-inline">

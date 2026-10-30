@@ -1,3 +1,10 @@
+/** Error codes may come from SDKs, transport adapters, or persisted sync state. */
+export function errorCode(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : "";
+}
+
 /** Preserve authored messages, with a context-specific fallback for unknown failures. */
 export function errorMessage(
   error: unknown,

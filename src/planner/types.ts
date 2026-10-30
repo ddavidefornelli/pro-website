@@ -35,6 +35,13 @@ export interface Dashboard {
   serverNow: number;
 }
 
+/** AI proposal for today, derived server-side from yesterday's tasks. */
+export interface TaskSuggestion {
+  outcome: string;
+  estimatedMinutes: number;
+  basis: "carry_over" | "follow_up";
+}
+
 export interface ReviewStop {
   id: number;
   taskId: string;

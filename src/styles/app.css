@@ -352,13 +352,340 @@ textarea:focus {
 }
 
 /* Phone layouts scroll naturally, including when the software keyboard opens. */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
 .plan-heading {
-  align-items: baseline;
-  gap: 16px;
+  display: grid;
+  justify-content: stretch;
+  gap: 10px;
+  width: 100%;
+}
+.plan-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .plan-date {
-  font-size: 15px;
+  color: var(--text);
+}
+.plan-summary {
+  margin: 0;
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 300;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+.plan-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.plan-slots li {
+  height: 2px;
+  background: var(--border);
+  transition: background-color 600ms var(--ease-out);
+}
+.plan-slots li.is-planned {
+  background: color-mix(in srgb, var(--text) 45%, var(--border));
+}
+.plan-slots li.is-active {
+  background: var(--blood-red);
+}
+.plan-slots li.is-done {
+  background: var(--text);
+}
+#app .task-form > label {
+  position: relative;
+}
+.quick-entry-hint,
+.quick-entry-chip {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 12px;
+}
+.quick-entry-hint,
+.shortcut-sheet kbd {
+  min-width: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  font-family: inherit;
+  text-align: center;
   color: var(--muted);
+}
+.task-form label:focus-within .quick-entry-hint,
+.task-form input:not(:placeholder-shown) ~ .quick-entry-hint {
+  opacity: 0;
+}
+.quick-entry-chip {
+  padding: 3px 8px;
+  color: #000;
+  background: var(--text);
+  animation: settle 260ms var(--ease-out);
+}
+@media (hover: none) {
+  .quick-entry-hint {
+    display: none;
+  }
+}
+.shortcut-sheet h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+}
+.shortcut-sheet dl {
+  display: grid;
+  margin: 0 0 20px;
+}
+.shortcut-sheet dl > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+.shortcut-sheet dd {
+  margin: 0;
+}
+.plan-topline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.text-button,
+.text-button:hover:not(:disabled) {
+  min-height: 32px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.text-button:hover:not(:disabled) {
+  color: var(--text);
+}
+.plan-summary.is-first-plan {
+  font-size: clamp(28px, 5vw, 44px);
+}
+.starters {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+.starters > p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.starter-list {
+  display: grid;
+  gap: 8px;
+}
+.starter-list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 12px 16px;
+  text-align: left;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  transition:
+    border-color 200ms ease,
+    transform 200ms var(--ease-out);
+}
+.starter-list button:hover:not(:disabled) {
+  transform: translateX(4px);
+}
+.starter-list .muted {
+  flex: none;
+  font-size: 13px;
+}
+@media (min-width: 760px) {
+  .starter-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .starter-list button {
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+}
+.hint-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.hint-card {
+  margin-top: 24px;
+  padding: 16px 20px;
+  border-left: 2px solid var(--blood-red);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  animation: rise 420ms var(--ease-out) both;
+}
+.hint-card p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.hint-card button {
+  min-height: 40px;
+  font-size: 13px;
+}
+.hint-card .primary-button,
+.hint-card .primary-button:hover:not(:disabled) {
+  color: #000;
+  background: var(--text);
+  border-color: var(--text);
+}
+#app .task.is-next {
+  position: relative;
+  padding-top: 36px;
+}
+#app .task-details > .up-next {
+  grid-area: auto;
+  position: absolute;
+  top: 14px;
+  left: 16px;
+}
+.up-next {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blood-red);
+}
+#app .task.is-next {
+  border-color: color-mix(in srgb, var(--text) 35%, var(--border));
+}
+#app .task:not(.is-next) > button:not(:disabled) {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border);
+}
+#app .task:not(.is-next) > button:hover:not(:disabled) {
+  border-color: var(--text);
+}
+.shortcut-hint {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.shortcut-hint .text-button,
+.shortcut-hint .text-button:hover:not(:disabled) {
+  text-decoration: none;
+}
+#app:has(.shortcut-hint) {
+  padding-bottom: 72px;
+}
+.shortcut-hint kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  font-family: inherit;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 10;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 12px 18px;
+  transform: translateX(-50%);
+  color: #000;
+  background: var(--text);
+  font-size: 14px;
+  box-shadow: 0 12px 40px #0008;
+  animation: rise 420ms var(--ease-out) both;
+}
+#app[data-focus-running] .navigation-header {
+  opacity: 0.18;
+  transition: opacity 600ms ease;
+}
+#app[data-focus-running] .navigation-header:hover,
+#app[data-focus-running] .navigation-header:focus-within {
+  opacity: 1;
+}
+#planner-content > * {
+  animation: rise 420ms var(--ease-out) both;
+}
+#app .task-list > .task {
+  transition:
+    border-color 240ms ease,
+    background-color 240ms ease,
+    opacity 400ms ease;
+  animation: rise 420ms var(--ease-out) both;
+}
+#app .task-list > .task:nth-child(2) {
+  animation-delay: 50ms;
+}
+#app .task-list > .task:nth-child(3) {
+  animation-delay: 100ms;
+}
+#app .task-list > .task:hover {
+  border-color: color-mix(in srgb, var(--text) 30%, var(--border));
+}
+/* Completed cards stay opaque so the full-strength background never washes them out. */
+#app .task-list > .task.is-completed {
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  border-color: var(--border);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+#app .task.is-completed .editable-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+#app .task.is-completed .editable-title::before {
+  content: "\2713";
+  flex: none;
+  color: var(--blood-red);
+}
+#app .task.is-completed .task-details > p {
+  padding-left: 26px;
+  color: var(--muted);
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #planner-content > *,
+  #app .task-list > .task,
+  .hint-card,
+  .toast,
+  .quick-entry-chip {
+    animation: none;
+  }
 }
 #app .task-list {
   min-height: auto;
@@ -667,4 +994,7 @@ textarea:focus {
 .download-page h1 {
   margin: 0;
   font-size: clamp(24px, 5vw, 48px);
+}
+#app .task-form > label > input {
+  padding-right: 96px;
 }
