@@ -149,10 +149,23 @@ textarea:focus {
   min-height: 60dvh;
   isolation: isolate;
 }
+.overview-screen.is-guest {
+  /* Fill the viewport below the navigation without letting the page scroll. */
+  height: calc(100dvh - 184px);
+  min-height: 420px;
+  overflow: hidden;
+}
 .overview-content[inert] {
-  filter: blur(5px);
-  opacity: 0.35;
+  opacity: 0.45;
   user-select: none;
+  pointer-events: none;
+  /* Fade the sample report out so the prompt stays the focal point. */
+  -webkit-mask-image: linear-gradient(#000 50%, transparent);
+  mask-image: linear-gradient(#000 50%, transparent);
+}
+/* Shape stays recognisable, text does not. */
+.overview-sample .weekly-report {
+  filter: blur(14px);
 }
 .overview-signin-overlay {
   position: absolute;
@@ -160,26 +173,150 @@ textarea:focus {
   z-index: 1;
   display: grid;
   place-items: center;
-  padding: 32px 20px;
-  background: color-mix(in srgb, var(--background) 65%, transparent);
+  padding: 32px 16px;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--background) 80%, transparent),
+    transparent
+  );
 }
 .overview-signin-prompt {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  width: min(100%, 480px);
+  padding: 40px clamp(20px, 6vw, 32px) 32px;
+  background:
+    radial-gradient(
+      120% 80% at 0% 0%,
+      color-mix(in srgb, var(--blood-red) 18%, transparent),
+      transparent 60%
+    ),
+    var(--background);
+  box-shadow:
+    0 0 48px color-mix(in srgb, var(--blood-red) 18%, transparent),
+    0 24px 64px #000000b3;
+}
+.overview-signin-eyebrow {
+  display: flex;
   align-items: center;
-  gap: 24px;
-  max-width: 420px;
-  text-align: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blood-red);
+}
+.overview-signin-eyebrow svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 .overview-signin-prompt h2 {
   margin: 0;
-  font-size: clamp(22px, 4vw, 30px);
-  line-height: 1.35;
-  text-wrap: balance;
+  font-family: "Pixelta", "Space Grotesk", sans-serif;
+  font-size: clamp(32px, 7vw, 42px);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: 0.025em;
 }
-.overview-signin-prompt button {
-  min-width: 160px;
+.overview-signin-prompt h2 em {
+  font-style: normal;
+  color: var(--blood-red);
+  text-shadow: 0 0 24px color-mix(in srgb, var(--blood-red) 55%, transparent);
+}
+.overview-signin-includes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0 0 28px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.overview-signin-includes li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.overview-signin-includes li::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  background: var(--border);
+}
+.overview-signin-includes li:last-child {
+  color: var(--text);
+}
+.overview-signin-includes li:last-child::before {
+  background: var(--blood-red);
+  box-shadow: 0 0 6px var(--blood-red);
+}
+.overview-signin-description {
+  margin: 12px 0 16px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.overview-signin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  width: 100%;
+}
+#app .overview-signin-primary {
+  flex: 1 1 160px;
+  min-height: 52px;
+  color: #000;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--blood-red);
+  border-color: var(--blood-red);
+}
+#app .overview-signin-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.overview-signin-arrow {
+  display: inline-block;
+  margin-left: 10px;
+  transition: transform 180ms ease;
+}
+#app .overview-signin-primary:hover:not(:disabled) .overview-signin-arrow {
+  transform: translateX(4px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .overview-signin-prompt {
+    animation: overview-signin-enter 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+@keyframes overview-signin-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+#app .overview-signin-secondary {
   min-height: 48px;
+  margin-inline: auto;
+  padding-inline: 8px;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+#app .overview-signin-secondary:hover:not(:disabled) {
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 .overview-actions {
   display: flex;
