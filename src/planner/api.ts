@@ -9,6 +9,7 @@ import type {
 import { WEEKLY_AI_VERSION } from "./constants.ts";
 import { errorCode } from "./errors.ts";
 import { GuestStore } from "./guest.ts";
+import { reportGuestUsage } from "./guest-usage.ts";
 import type { LocalQueue } from "./local-queue.ts";
 import type {
   AuthStatus,
@@ -46,7 +47,7 @@ export class PlanningClient {
     guest = false,
   }: PlanningClientOptions = {}) {
     this.cloud = cloud;
-    this.guest = guest ? new GuestStore() : null;
+    this.guest = guest ? new GuestStore(localStorage, reportGuestUsage) : null;
     this.cloud.onAccountChange = () => {
       void this.queue?.stop();
       window.location.reload();

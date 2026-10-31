@@ -7,6 +7,7 @@ export const SUPABASE_ROUTES = {
   signOut: "/auth/v1/logout",
   planner: "/rest/v1/rpc/planner_call",
   importGuest: "/rest/v1/rpc/planner_import_guest",
+  guestUsage: "/rest/v1/rpc/guest_record_usage",
   weeklyReview: "/functions/v1/weekly-review",
   taskSuggestions: "/functions/v1/task-suggestions",
 } as const;

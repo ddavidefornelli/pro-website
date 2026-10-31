@@ -6,7 +6,7 @@
 with expected(name) as (values
   ('planner_accounts'), ('planner_tasks'), ('planner_resources'), ('planner_stops'),
   ('planner_reviews'), ('planner_receipts'), ('ai_controls'), ('ai_usage'),
-  ('ai_review_requests'), ('ai_review_previews')
+  ('ai_review_requests'), ('ai_review_previews'), ('guest_usage_daily')
 )
 select e.name, c.oid is not null as table_exists,
   coalesce(c.relrowsecurity, false) as rls_enabled
@@ -19,7 +19,7 @@ order by e.name;
 with expected(name) as (values
   ('planner_accounts'), ('planner_tasks'), ('planner_resources'), ('planner_stops'),
   ('planner_reviews'), ('planner_receipts'), ('ai_controls'), ('ai_usage'),
-  ('ai_review_requests'), ('ai_review_previews')
+  ('ai_review_requests'), ('ai_review_previews'), ('guest_usage_daily')
 ), roles(name) as (values ('anon'), ('authenticated'))
 select e.name as table_name, r.name as role_name,
   has_table_privilege(r.name, c.oid, 'SELECT') as can_select,
@@ -59,6 +59,19 @@ where n.nspname = 'public' and (
     'finish_review_preview', 'fail_review_preview')
 )
 order by function_name;
+
+-- 4b. guest_record_usage(jsonb) is the only anon-callable function.
+-- Expected: security_definer=true, empty search_path, anon_execute=true,
+-- authenticated_execute=false, public_execute=false.
+select p.oid::regprocedure::text as function_name, p.prosecdef as security_definer,
+  p.proconfig as function_settings,
+  has_function_privilege('anon', p.oid, 'EXECUTE') as anon_execute,
+  has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated_execute,
+  exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where acl.grantee = 0 and acl.privilege_type = 'EXECUTE') as public_execute
+from pg_catalog.pg_proc p
+join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname = 'guest_record_usage';
 
 -- 5. Queue protocol and latest UI rules must actually be deployed.
 -- Expected: true/true. Missing functions return false rather than applying anything.

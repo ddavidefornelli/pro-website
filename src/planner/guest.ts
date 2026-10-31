@@ -1,6 +1,7 @@
 import type { QueuedAction, TaskAction, TaskArguments } from "./commands.ts";
 import { ESTIMATE, PLANNER_LIMITS } from "./constants.ts";
 import { alignDashboardDate, dashboardTasks } from "./dashboard.ts";
+import { guestUsage, type GuestUsage } from "./guest-usage.ts";
 import { applyCommand } from "./task-projection.ts";
 import { localDay, nextDay } from "./time.ts";
 import type { Account, Dashboard, Task } from "./types.ts";
@@ -40,8 +41,13 @@ function emptyGuestDashboard(now = Math.floor(Date.now() / 1000)): Dashboard {
 /** The original command journal is retained until every server receipt is confirmed. */
 export class GuestStore {
   private readonly storage: Storage;
-  constructor(storage: Storage = localStorage) {
+  private readonly onUsage: (usage: GuestUsage) => void;
+  constructor(
+    storage: Storage = localStorage,
+    onUsage: (usage: GuestUsage) => void = () => {},
+  ) {
     this.storage = storage;
+    this.onUsage = onUsage;
   }
   private load(): GuestState {
     const raw = this.storage.getItem(GUEST_KEY);
@@ -140,8 +146,10 @@ export class GuestStore {
       };
       // Return the mutated task even if completion removes it from the day lists.
       const task = applyCommand(data, command);
+      const usage = guestUsage(state.commands, command, task);
       state.commands.push(command);
       this.save(state); // Never report success before durable storage succeeds.
+      this.onUsage(usage);
       return structuredClone(task);
     });
   }
