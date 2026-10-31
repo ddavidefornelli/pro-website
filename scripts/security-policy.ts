@@ -14,6 +14,11 @@ export const ANALYTICS_CONNECTIONS = ANALYTICS_ORIGINS.map((origin) => `${origin
 export const CONTENTSQUARE_SCRIPTS = ["https://*.contentsquare.net", "https://app.contentsquare.com"];
 export const CONTENTSQUARE_CONNECTIONS = ["https://*.contentsquare.net", "https://*.contentsquare.com"];
 export const CONTENTSQUARE_IMAGES = ["https://*.contentsquare.net"];
+// Session Replay's Static Resource Manager fetch()es the page's own CSS, fonts
+// and images to upload them, so replays keep rendering after a deploy removes
+// the old hashed assets. Static paths only: not 'self', which includes /api/.
+export const CONTENTSQUARE_RESOURCES = PRODUCTION_ORIGINS.flatMap((origin) =>
+  ["/assets/", "/fonts/", "/prune-background.png", "/prune-background-mask.png", "/favicon.png", "/apple-touch-icon.png"].map((path) => `${origin}${path}`));
 
 export function integrity(content: string | Uint8Array): string {
   return `sha384-${createHash("sha384").update(content).digest("base64")}`;
@@ -34,7 +39,7 @@ export function securityHeaders(apiOrigin: string, scriptHashes: string[]): Reco
     "script-src-attr 'none'",
     "style-src 'self'",
     "style-src-attr 'none'",
-    `connect-src ${[...API_PATHS.map((path) => `${apiOrigin}${path}`), ...ANALYTICS_CONNECTIONS, ...CONTENTSQUARE_CONNECTIONS].join(" ")}`,
+    `connect-src ${[...API_PATHS.map((path) => `${apiOrigin}${path}`), ...ANALYTICS_CONNECTIONS, ...CONTENTSQUARE_CONNECTIONS, ...CONTENTSQUARE_RESOURCES].join(" ")}`,
     `img-src 'self' ${CONTENTSQUARE_IMAGES.join(" ")}`,
     "font-src 'self'",
     "manifest-src 'none'",
