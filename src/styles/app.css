@@ -31,19 +31,16 @@ body::before {
 body:has(#app[data-completion-level="1"]) {
   --pixel-opacity: 0.32;
   --pixel-presence: 0.48;
-  --pixel-bloom: 2px;
   --logo-opacity: 0.025;
 }
 body:has(#app[data-completion-level="2"]) {
   --pixel-opacity: 0.58;
   --pixel-presence: 0.7;
-  --pixel-bloom: 4px;
   --logo-opacity: 0.03;
 }
 body:has(#app[data-completion-level="3"]) {
   --pixel-opacity: 0.94;
   --pixel-presence: 0.9;
-  --pixel-bloom: 7px;
   --logo-opacity: 0.035;
 }
 body:has(#app[data-completion-level]:not([data-completion-level="0"]))::before {
@@ -73,7 +70,6 @@ body:has(#app[data-completion-level]:not([data-completion-level="0"]))::before {
   image-rendering: pixelated;
   opacity: var(--pixel-presence, 0);
   transition: opacity 1.8s ease;
-  filter: drop-shadow(0 0 var(--pixel-bloom, 0px) #ff123b);
 }
 body:has(#app[data-completion-level]:not([data-completion-level="0"]))
   .cyber-artwork {
@@ -159,13 +155,6 @@ textarea:focus {
   opacity: 0.45;
   user-select: none;
   pointer-events: none;
-  /* Fade the sample report out so the prompt stays the focal point. */
-  -webkit-mask-image: linear-gradient(#000 50%, transparent);
-  mask-image: linear-gradient(#000 50%, transparent);
-}
-/* Shape stays recognisable, text does not. */
-.overview-sample .weekly-report {
-  filter: blur(14px);
 }
 .overview-signin-overlay {
   position: absolute;
@@ -174,11 +163,6 @@ textarea:focus {
   display: grid;
   place-items: center;
   padding: 32px 16px;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in srgb, var(--background) 80%, transparent),
-    transparent
-  );
 }
 .overview-signin-prompt {
   display: flex;
@@ -186,33 +170,7 @@ textarea:focus {
   align-items: flex-start;
   width: min(100%, 480px);
   padding: 40px clamp(20px, 6vw, 32px) 32px;
-  background:
-    radial-gradient(
-      120% 80% at 0% 0%,
-      color-mix(in srgb, var(--blood-red) 18%, transparent),
-      transparent 60%
-    ),
-    var(--background);
-  box-shadow:
-    0 0 48px color-mix(in srgb, var(--blood-red) 18%, transparent),
-    0 24px 64px #000000b3;
-}
-.overview-signin-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 20px;
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--blood-red);
-}
-.overview-signin-eyebrow svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
+  background: var(--background);
 }
 .overview-signin-prompt h2 {
   margin: 0;
@@ -225,7 +183,6 @@ textarea:focus {
 .overview-signin-prompt h2 em {
   font-style: normal;
   color: var(--blood-red);
-  text-shadow: 0 0 24px color-mix(in srgb, var(--blood-red) 55%, transparent);
 }
 .overview-signin-includes {
   display: flex;
@@ -254,7 +211,6 @@ textarea:focus {
 }
 .overview-signin-includes li:last-child::before {
   background: var(--blood-red);
-  box-shadow: 0 0 6px var(--blood-red);
 }
 .overview-signin-description {
   margin: 12px 0 16px;
@@ -283,14 +239,6 @@ textarea:focus {
 #app .overview-signin-primary:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
-}
-.overview-signin-arrow {
-  display: inline-block;
-  margin-left: 10px;
-  transition: transform 180ms ease;
-}
-#app .overview-signin-primary:hover:not(:disabled) .overview-signin-arrow {
-  transform: translateX(4px);
 }
 @media (prefers-reduced-motion: no-preference) {
   .overview-signin-prompt {
@@ -326,10 +274,10 @@ textarea:focus {
 #app .profile-button {
   display: grid;
   place-items: center;
-  width: 44px;
   height: 44px;
-  padding: 0;
+  padding: 0 16px;
   border-radius: 0;
+  font-size: 13px;
 }
 /* An opaque band keeps scrolling content behind the navigation. */
 #app > .navigation-header {
@@ -498,15 +446,24 @@ textarea:focus {
   gap: 10px;
   width: 100%;
 }
-.plan-eyebrow {
-  margin: 0;
+.plan-summary.is-prompt {
+  font-family: "Pixelta", "Space Grotesk", sans-serif;
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: 0.025em;
+}
+.plan-summary em {
+  font-style: normal;
+  color: var(--blood-red);
+}
+.plan-signin,
+.plan-signin:hover:not(:disabled) {
   font-size: 12px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--muted);
-}
-.plan-date {
-  color: var(--text);
+  text-decoration-color: var(--blood-red);
+  white-space: nowrap;
 }
 .plan-summary {
   margin: 0;
@@ -596,7 +553,7 @@ textarea:focus {
 .plan-topline {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
 }
 .text-button,
@@ -614,7 +571,7 @@ textarea:focus {
   color: var(--text);
 }
 .plan-summary.is-first-plan {
-  font-size: clamp(28px, 5vw, 44px);
+  font-size: clamp(32px, 6vw, 52px);
 }
 .starters {
   display: grid;
@@ -687,6 +644,58 @@ textarea:focus {
   background: var(--text);
   border-color: var(--text);
 }
+.evening-card {
+  gap: 20px 32px;
+  padding: 24px clamp(20px, 4vw, 32px);
+  border-left: 0;
+  background: var(--background);
+}
+.evening-copy {
+  flex: 1 1 260px;
+}
+.evening-card .evening-eyebrow {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blood-red);
+}
+.evening-card .evening-title {
+  margin: 0;
+  font-family: "Pixelta", "Space Grotesk", sans-serif;
+  font-size: clamp(26px, 4vw, 34px);
+  line-height: 1.08;
+  letter-spacing: 0.025em;
+}
+.evening-title em {
+  font-style: normal;
+  color: var(--blood-red);
+}
+.evening-card .evening-note {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+.evening-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+#app .evening-primary {
+  min-height: 48px;
+  padding: 0 20px;
+  color: #000;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--blood-red);
+  border-color: var(--blood-red);
+}
+#app .evening-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
 #app .task.is-next {
   position: relative;
   padding-top: 36px;
@@ -752,7 +761,6 @@ textarea:focus {
   color: #000;
   background: var(--text);
   font-size: 14px;
-  box-shadow: 0 12px 40px #0008;
   animation: rise 420ms var(--ease-out) both;
 }
 #app[data-focus-running] .navigation-header {
@@ -784,10 +792,8 @@ textarea:focus {
 }
 /* Completed cards stay opaque so the full-strength background never washes them out. */
 #app .task-list > .task.is-completed {
-  background: color-mix(in srgb, var(--background) 88%, transparent);
+  background: var(--background);
   border-color: var(--border);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
 }
 #app .task.is-completed .editable-title {
   display: flex;
@@ -917,8 +923,9 @@ textarea:focus {
   flex: none;
 }
 #app .task-form .add-task {
-  width: 48px;
   height: 48px;
+  padding: 0 18px;
+  font-size: 13px;
   justify-self: end;
   background: var(--accent);
   border-color: var(--accent);
