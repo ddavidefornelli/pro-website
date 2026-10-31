@@ -883,7 +883,7 @@ textarea:focus {
   color: #000;
 }
 #app .task-form {
-  grid-template-columns: minmax(0, 1fr) 48px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   padding-top: 24px;
@@ -1114,7 +1114,7 @@ textarea:focus {
     justify-self: end;
   }
   #app .task-form {
-    grid-template-columns: minmax(0, 1fr) auto 48px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
   #app .task-form > label {
     grid-column: 1;
