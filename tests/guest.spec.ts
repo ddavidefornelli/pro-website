@@ -6,7 +6,7 @@ test("visitors can plan and reload without authentication or cloud requests", as
     if (request.url().includes("supabase.co") || request.url().includes("/api/planner")) cloudRequests.push(request.url());
   });
   await page.goto("/");
-  await expect(page.locator(".plan-summary")).toHaveText("What would make today a good day?");
+  await expect(page.locator(".plan-summary")).toHaveText("What would make today count?");
   await expect(page.getByRole("textbox", { name: "Email address" })).toHaveCount(0);
   const outcome = page.getByRole("textbox", { name: "Outcome", exact: true });
   await expect(outcome).toBeFocused();

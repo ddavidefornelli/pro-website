@@ -150,7 +150,7 @@ export { expect };
 export async function openPlanner(page: Page) {
   await page.goto("/");
   await expect(page.locator('nav[aria-label="Main navigation"]')).toBeVisible();
-  await expect(page.locator(".plan-date")).toBeVisible();
+  await expect(page.locator(".plan-summary")).toBeVisible();
   await expect(page.locator(".task-form .add-task")).toBeEnabled();
 }
 /** Open sign-in through the current guest Overview, not a retired landing route. */
