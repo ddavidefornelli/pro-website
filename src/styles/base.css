@@ -95,7 +95,6 @@ h1 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 0;
-  box-shadow: 0 24px 80px #0008;
 }
 .privacy-dialog[open] {
   display: flex;
@@ -103,8 +102,6 @@ h1 {
 }
 .privacy-dialog::backdrop {
   background: #000a;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 .privacy-dialog-header {
   display: flex;
@@ -169,15 +166,6 @@ h1 {
 }
 .auth-panel label {
   display: grid;
-}
-.profile-button svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .profile-page {
   width: 100%;
@@ -308,9 +296,6 @@ nav::before {
   transform: translate3d(var(--selection-left, 5px), 0, 0);
   background: var(--accent);
   border-radius: 0;
-  box-shadow:
-    0 2px 8px #0003,
-    inset 0 1px 0 #ffffff1a;
   pointer-events: none;
 }
 nav.has-selection::before {
@@ -491,15 +476,6 @@ p {
   place-items: center;
   padding: 0;
 }
-.add-task svg {
-  display: block;
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-}
 .estimate-control {
   place-items: center;
 }
@@ -661,12 +637,9 @@ textarea::placeholder {
   color: var(--text);
   border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
 }
 .pause-dialog::backdrop {
-  background: rgb(0 0 0 / 45%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgb(0 0 0 / 70%);
 }
 .pause-form {
   margin: 0;
@@ -742,7 +715,8 @@ textarea {
   border-color: var(--surface);
 }
 .activity-day.is-today {
-  box-shadow: inset 0 0 0 1px #ffffff70;
+  outline: 1px solid #ffffff70;
+  outline-offset: -1px;
 }
 .activity-grid .activity-day:not(.is-future):hover,
 .activity-day:focus-visible {
@@ -799,25 +773,7 @@ textarea {
   padding: clamp(24px, 5vw, 44px);
   border: 1px solid var(--border);
   border-radius: 0;
-  background: linear-gradient(135deg, var(--surface), var(--background) 75%);
-  box-shadow:
-    inset 0 1px 0 #ffffff0a,
-    0 16px 48px #0003;
-}
-.review-countdown::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: -85px;
-  right: 0;
-  width: min(260px, 100%);
-  height: 260px;
-  border: 1px solid #ffffff12;
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 32px #ffffff06,
-    0 0 0 64px #ffffff04;
-  pointer-events: none;
+  background: var(--background);
 }
 .weekly-overview .review-countdown-title {
   margin: 0 0 24px;
@@ -843,8 +799,7 @@ textarea {
   text-align: center;
   border: 1px solid #ffffff12;
   border-radius: 0;
-  background: linear-gradient(#ffffff07, #ffffff02);
-  box-shadow: inset 0 1px 0 #ffffff06;
+  background: transparent;
 }
 .review-countdown-value {
   font-size: clamp(26px, 5vw, 44px);
@@ -873,7 +828,6 @@ textarea {
   height: 100%;
   border-radius: 0;
   background: var(--accent);
-  box-shadow: 0 0 12px #ffffff22;
 }
 .review-countdown-date {
   margin: 0;

@@ -64,14 +64,3 @@ export function formatDayHeading(day: string): string {
     month: "long",
   });
 }
-
-export function greeting(seconds: number): string {
-  const hour = new Date(seconds * 1000).getHours();
-  return hour < 5
-    ? "Working late"
-    : hour < 12
-      ? "Good morning"
-      : hour < 18
-        ? "Good afternoon"
-        : "Good evening";
-}

@@ -11,13 +11,7 @@ import {
 import type { PlanningClient } from "../api";
 import { PLANNER_LIMITS } from "../constants";
 import type { PlannerState } from "../create-planner";
-import {
-  formatClock,
-  formatDayHeading,
-  formatMinutes,
-  greeting,
-  summarizeDay,
-} from "../quick-entry";
+import { formatClock, formatMinutes, summarizeDay } from "../quick-entry";
 import type { Hints } from "../hints";
 import { formatDuration, previousDay } from "../time";
 import { EstimateDial } from "./EstimateDial";
@@ -47,10 +41,6 @@ export function PlanView(props: {
     [];
   const day = () =>
     (tomorrow() ? planner.data()?.tomorrow : planner.data()?.today) ?? "";
-  const dayLabel = () => {
-    const [year, month, date] = day().split("-");
-    return `${date}/${month}/${year?.slice(-2)}`;
-  };
   const summary = createMemo(() => summarizeDay(tasks(), planner.now()));
   const desktop = window.matchMedia(DESKTOP_QUERY).matches;
   const completedTotal = () =>
@@ -137,12 +127,28 @@ export function PlanView(props: {
   const status = () => {
     const { completed, remainingSeconds, focusedSeconds, finishAt } = summary();
     if (!tasks().length) {
-      if (tomorrow()) return "Choose up to three outcomes before you sign off.";
-      if (firstPlan()) return "What would make today a good day?";
+      if (tomorrow())
+        return (
+          <>
+            Pick tomorrow&rsquo;s <em>three</em>.
+          </>
+        );
+      if (firstPlan())
+        return (
+          <>
+            What would make today <em>count</em>?
+          </>
+        );
       const yesterday = yesterdayCount();
-      return yesterday
-        ? `Yesterday you finished ${yesterday}. What are today\u2019s three?`
-        : "Choose up to three outcomes that would make today a good day.";
+      return yesterday ? (
+        <>
+          {yesterday} down yesterday. Today&rsquo;s <em>three</em>?
+        </>
+      ) : (
+        <>
+          Pick today&rsquo;s <em>three</em>.
+        </>
+      );
     }
     if (tomorrow())
       return `${tasks().length} of ${PLANNER_LIMITS.tasksPerDay} planned\u00a0· ${formatMinutes(remainingSeconds)} of focus`;
@@ -154,28 +160,24 @@ export function PlanView(props: {
   return (
     <>
       <header class="plan-heading">
-        <div class="plan-topline">
-          <p class="plan-eyebrow">
-            {tomorrow() ? "Tomorrow" : greeting(planner.now())}
-            <span aria-hidden="true"> · </span>
-            <time class="plan-date" dateTime={day()} title={dayLabel()}>
-              {formatDayHeading(day())}
-            </time>
-          </p>
-          <Show when={props.guest}>
+        <Show when={props.guest}>
+          <div class="plan-topline">
             <button
               type="button"
-              class="text-button"
+              class="text-button plan-signin"
               aria-label="Sign in to sync"
               onClick={() => props.onSignIn()}
             >
               Sign in
             </button>
-          </Show>
-        </div>
+          </div>
+        </Show>
         <p
           class="plan-summary"
-          classList={{ "is-first-plan": firstPlan() }}
+          classList={{
+            "is-first-plan": firstPlan(),
+            "is-prompt": !tasks().length,
+          }}
           aria-live="polite"
         >
           {status()}
@@ -381,21 +383,30 @@ export function PlanView(props: {
           </aside>
         </Match>
         <Match when={hint() === "evening"}>
-          <aside class="hint-card" aria-label="Evening planning">
-            <p>Evening already. Set up tomorrow while today is still fresh.</p>
-            <button
-              type="button"
-              class="primary-button"
-              onClick={() => planner.visit("tomorrow")}
-            >
-              Plan tomorrow
-            </button>
-            <button
-              type="button"
-              onClick={() => props.hints.dismiss(eveningId())}
-            >
-              Not tonight
-            </button>
+          <aside class="hint-card evening-card" aria-label="Evening planning">
+            <div class="evening-copy">
+              <p class="evening-eyebrow">After hours</p>
+              <p class="evening-title">
+                Tomorrow&rsquo;s still <em>blank</em>.
+              </p>
+              <p class="evening-note">Lock in three before today fades.</p>
+            </div>
+            <div class="evening-actions">
+              <button
+                type="button"
+                class="evening-primary"
+                onClick={() => planner.visit("tomorrow")}
+              >
+                Plan tomorrow
+              </button>
+              <button
+                type="button"
+                class="text-button"
+                onClick={() => props.hints.dismiss(eveningId())}
+              >
+                Not tonight
+              </button>
+            </div>
           </aside>
         </Match>
       </Switch>

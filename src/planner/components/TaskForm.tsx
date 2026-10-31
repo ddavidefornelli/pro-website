@@ -110,13 +110,10 @@ export function TaskForm(props: TaskFormProps) {
         <button
           type="submit"
           class="add-task"
-          title="Add task"
           aria-label="Add task"
           disabled={props.busy}
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 3v18M3 12h18" />
-          </svg>
+          Add
         </button>
       </form>
       <Show when={estimating()}>
