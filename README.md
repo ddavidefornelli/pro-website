@@ -57,6 +57,7 @@ Do **not** reset the Mac app's database or create a parallel account store. Poin
 ```text
 /auth/v1/otp, /verify, /user, /token, /logout
 /rest/v1/rpc/planner_call
+/rest/v1/rpc/guest_record_usage
 /functions/v1/weekly-review
 /functions/v1/task-suggestions
 ```
@@ -72,6 +73,26 @@ When Today or Tomorrow has open slots, signed-in users see up to three proposals
 3. Rebuild this client so the CSP `connect-src` includes the new function path.
 
 If the function is missing or fails, the plan simply shows no suggestions.
+
+### Guest usage totals
+
+Signed-out use of the planner adds to anonymous daily totals in `public.guest_usage_daily`: `new_guests`, `active_guests` and `returning_guests` (devices, counted once per local day from the guest journal itself, with no extra identifier), `tasks_created`, `tasks_started`, `tasks_completed` and `focus_minutes` (recorded time of completed tasks). Rows hold only a UTC day, a metric and a total; no task text or identifiers are sent. Only production origins report, and a failed report never affects planning. The public key can call the function, so totals are indicative rather than tamper-proof.
+
+1. Apply `supabase/migrations/20261031000100_guest_usage.sql` (table + the anon-callable `guest_record_usage`).
+2. Rebuild this client so the CSP `connect-src` includes the new RPC path.
+
+Read them in the SQL Editor:
+
+```sql
+select day,
+  sum(total) filter (where metric = 'new_guests') as new_guests,
+  sum(total) filter (where metric = 'active_guests') as active_guests,
+  sum(total) filter (where metric = 'returning_guests') as returning_guests,
+  sum(total) filter (where metric = 'tasks_created') as tasks_created,
+  sum(total) filter (where metric = 'tasks_completed') as tasks_completed,
+  sum(total) filter (where metric = 'focus_minutes') as focus_minutes
+from public.guest_usage_daily group by day order by day desc;
+```
 
 ### Account deletion
 

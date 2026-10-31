@@ -8,7 +8,7 @@ test.describe("first run", () => {
       await page.setViewportSize({ width, height: 844 });
       await openPlanner(page);
       await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(page.locator(".plan-summary")).toHaveText("What would make today a good day?");
+      await expect(page.locator(".plan-summary")).toHaveText("What would make today count?");
       await page.getByRole("region", { name: "Starting ideas" })
         .getByRole("button", { name: /Plan the week ahead/ }).click();
       await synced(page);
@@ -44,7 +44,7 @@ test.describe("returning visits", () => {
     const yesterday = new Date(Date.parse(`${backend.data.today}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
     backend.data.completions = [{ day: yesterday, count: 2 }];
     await openPlanner(page);
-    await expect(page.locator(".plan-summary")).toHaveText("Yesterday you finished 2. What are today’s three?");
+    await expect(page.locator(".plan-summary")).toHaveText("2 down yesterday. Today’s three?");
     await expect(page.locator(".starters, .hint-card")).toHaveCount(0);
   });
 
